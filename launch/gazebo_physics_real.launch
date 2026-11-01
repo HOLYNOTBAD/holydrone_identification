@@ -1,0 +1,7 @@
+<launch>
+  <arg name="config" default="$(find holydrone_identification)/config/gazebo_physics.yaml"/>
+  <include file="$(find holydrone)/launch/mavros_real.launch"/>
+  <include file="$(find holydrone_identification)/launch/gazebo_physics.launch">
+    <arg name="config" value="$(arg config)"/>
+  </include>
+</launch>

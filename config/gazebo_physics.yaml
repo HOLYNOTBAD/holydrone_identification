@@ -1,0 +1,25 @@
+# 实飞物理辨识：先起飞悬停，再手动进入 OFFBOARD。
+frequency: 50.0
+hover_thrust: 0.24
+rate_amplitudes: [0.30, 0.30, 0.25]
+thrust_amplitude: 0.025
+baseline_seconds: 0.50
+pulse_hold: 0.50
+recovery_seconds: 2.0
+repetitions: 2
+
+# 处理日志前必须换成实机测量值。坐标系为机体 FLU，顺序对应 PX4 电机 0..3。
+mass_kg: 0.0
+rotor_positions_flu_m:
+  - [0.09690, -0.11073, 0.0]
+  - [-0.09690, 0.11073, 0.0]
+  - [0.09690, 0.11073, 0.0]
+  - [-0.09690, -0.11073, 0.0]
+yaw_torque_signs: [-1, -1, 1, 1]
+
+# Holydrone SDF 中归一化电机指令到目标机械角速度的比例。
+gazebo_input_scaling_rad_s: 1360.0
+gazebo_zero_position_armed_rad_s: 100.0
+gazebo_max_rot_velocity_rad_s: 1360.0
+motor_tau_min_s: 0.003
+motor_tau_max_s: 0.15

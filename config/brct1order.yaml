@@ -1,0 +1,9 @@
+# BRCT 一阶响应辨识：手动进入 OFFBOARD 后自动执行。
+frequency: 50.0
+hover_thrust: 0.24
+rate_amplitudes: [0.20, 0.20, 0.25]
+thrust_amplitude: 0.015
+baseline_seconds: 0.30
+pulse_hold: 0.35
+recovery_seconds: 2.0
+repetitions: 3

@@ -1,0 +1,16 @@
+<launch>
+  <arg name="config" default="$(find holydrone_identification)/config/brct1order.yaml"/>
+  <arg name="exciter" default="brct1order_excite"/>
+  <arg name="exit_mode" default="POSCTL"/>
+  <node pkg="holydrone" type="configure_mavlink_streams.py" name="configure_identification_feedback" output="screen">
+    <param name="interval_us" value="20000"/>
+    <rosparam param="message_ids">[83]</rosparam>
+  </node>
+  <node pkg="holydrone_identification" type="$(arg exciter)" name="$(arg exciter)" output="screen" required="true">
+    <rosparam command="load" file="$(arg config)"/>
+  </node>
+  <node pkg="holydrone_identification" type="identification_fsm" name="identification_fsm" output="screen" required="true">
+    <param name="exit_mode" value="$(arg exit_mode)"/>
+    <param name="exciter" value="$(arg exciter)"/>
+  </node>
+</launch>

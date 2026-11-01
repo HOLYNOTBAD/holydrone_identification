@@ -1,0 +1,18 @@
+<launch>
+  <arg name="output"/>
+  <arg name="px4_dir" default="$(optenv PX4_DIR /home/holy/bvr/third_party/PX4-Autopilot)"/>
+  <arg name="gui" default="true"/>
+  <arg name="config" default="$(find holydrone_identification)/config/brct1order.yaml"/>
+  <include file="$(find holydrone)/launch/sitl.launch">
+    <arg name="px4_dir" value="$(arg px4_dir)"/>
+    <arg name="px4_runtime_dir" value="$(arg output)/px4"/>
+    <arg name="world" value="$(find holydrone)/gazebo/worlds/empty.world"/>
+    <arg name="spawn_z" value="0.055"/><arg name="gui" value="$(arg gui)"/>
+  </include>
+  <include file="$(find holydrone)/launch/mavros_sim.launch">
+    <arg name="fcu_url" value="udp://127.0.0.1:14540@127.0.0.1:14580"/>
+  </include>
+  <include file="$(find holydrone_identification)/launch/identification_fsm.launch">
+    <arg name="config" value="$(arg config)"/>
+  </include>
+</launch>
