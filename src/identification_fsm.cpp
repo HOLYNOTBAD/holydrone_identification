@@ -70,7 +70,8 @@ class Identification {
     if (exit_mode_ != "POSCTL" && exit_mode_ != "AUTO.LOITER")
       throw std::runtime_error("exit_mode must be POSCTL or AUTO.LOITER");
     const bool physics = exciter_ == "gazebo_physics_excite";
-    if (!physics && exciter_ != "brct1order_excite") throw std::runtime_error("unknown exciter");
+    const bool second = exciter_ == "brct2order_excite";
+    if (!physics && !second && exciter_ != "brct1order_excite") throw std::runtime_error("unknown exciter");
     pulse_hold_ = physics ? .5 : .35;
     std::vector<double> rates = physics ? std::vector<double>{.3,.3,.25} : std::vector<double>{.2,.2,.25};
     priv_.param("rate_amplitudes", rates, rates);
@@ -107,10 +108,13 @@ class Identification {
     for (double r : rates) if (!std::isfinite(r) || r <= 0) throw std::runtime_error("invalid rate amplitude");
     const std::array<double, 3> a{{rates[0],rates[1],rates[2]}};
     std::vector<double> durations;
-    if (physics) priv_.getParam("pulse_durations_s", durations);
+    if (second) durations = {.2, .35, .5};
+    if (physics || second) priv_.getParam("pulse_durations_s", durations);
     for (double d : durations) if (!std::isfinite(d) || d < .1 || d > .75)
       throw std::runtime_error("pulse_durations_s must be within [0.1, 0.75] s");
-    plan_ = physics ? identification::physicsPlan(a, thrust, repetitions, durations) : identification::firstOrderPlan(a, thrust, repetitions);
+    plan_ = physics ? identification::physicsPlan(a, thrust, repetitions, durations) :
+      second ? identification::secondOrderPlan(a, thrust, repetitions, durations) :
+               identification::firstOrderPlan(a, thrust, repetitions);
     bool sweep=false;
     priv_.param("yaw_sweep/enabled",sweep,false);
     if(sweep) {

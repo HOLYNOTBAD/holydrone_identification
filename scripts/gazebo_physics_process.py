@@ -283,24 +283,54 @@ def fit_rotation(matrix, target, strict=True):
     return values, condition
 
 
+def validate_inertia_prior(config):
+    """Validate measured inertia and its uncertainty before loading flight data."""
+    mean = config.get('inertia_prior_kg_m2')
+    sigma = config.get('inertia_prior_std_kg_m2')
+    if (mean is None) != (sigma is None):
+        raise ValueError('Inertia prior requires both measured mean and standard deviation')
+    raw_axes = config.get('inertia_prior_axes',[0,1,2])
+    if not isinstance(raw_axes,list) or any(type(axis) is not int for axis in raw_axes):
+        raise ValueError('Inertia prior axes must be integer indices 0, 1, 2')
+    axes = np.asarray(raw_axes,int)
+    if mean is not None:
+        mean, sigma = np.asarray(mean,float), np.asarray(sigma,float)
+        if (axes.ndim!=1 or len(axes)==0 or len(set(axes.tolist()))!=len(axes)
+                or np.any(axes<0) or np.any(axes>2) or mean.shape!=axes.shape or sigma.shape!=axes.shape
+                or not np.isfinite([mean,sigma]).all() or np.any(mean<=0) or np.any(sigma<=0)
+                or (len(axes)==3 and np.any(2*mean>=mean.sum())) or not isinstance(config.get('inertia_prior_source'),str)
+                or not config['inertia_prior_source'].strip()):
+            raise ValueError('Invalid inertia prior; supply axis indices, physical values, positive uncertainties and source')
+    return mean, sigma, axes
+
+
+def load_parameter_priors(config, path):
+    """An explicitly selected prior file replaces any embedded inertia prior."""
+    content = path.read_bytes()
+    prior = yaml.safe_load(content)
+    keys = {'inertia_prior_axes', 'inertia_prior_kg_m2', 'inertia_prior_std_kg_m2', 'inertia_prior_source'}
+    if not isinstance(prior,dict) or type(prior.get('enabled')) is not bool:
+        raise ValueError('Prior file requires enabled: true or false')
+    if set(prior)-keys-{'enabled'}:
+        raise ValueError('Unknown parameter prior keys: '+str(sorted(set(prior)-keys-{'enabled'})))
+    merged = {key:value for key,value in config.items() if key not in keys}
+    if prior['enabled']:
+        if prior.get('inertia_prior_kg_m2') is None or prior.get('inertia_prior_std_kg_m2') is None:
+            raise ValueError('Enabled prior requires measured inertia and standard deviation')
+        merged.update({key:prior[key] for key in keys if key in prior})
+        validate_inertia_prior(merged)
+        if merged.get('rotation_fit_method') != 'angular_acceleration':
+            raise ValueError('Enabled prior requires rotation_fit_method: angular_acceleration')
+    return merged, dict(path=str(path.resolve()),sha256=hashlib.sha256(content).hexdigest(),enabled=prior['enabled'])
+
+
 def fit_angular_acceleration(matrix, target, config):
     """Fit acceleration residuals, not homogeneous torque residuals.
 
     Positive second moments enforce all inertia triangle inequalities. Optional
     independent inertia measurements enter as a Gaussian prior with explicit sigma.
     """
-    mean = config.get('inertia_prior_kg_m2')
-    sigma = config.get('inertia_prior_std_kg_m2')
-    if (mean is None) != (sigma is None):
-        raise ValueError('Inertia prior requires both measured mean and standard deviation')
-    axes = np.asarray(config.get('inertia_prior_axes',[0,1,2]),int)
-    if mean is not None:
-        mean, sigma = np.asarray(mean,float), np.asarray(sigma,float)
-        if (axes.ndim!=1 or len(axes)==0 or len(set(axes.tolist()))!=len(axes)
-                or np.any(axes<0) or np.any(axes>2) or mean.shape!=axes.shape or sigma.shape!=axes.shape
-                or not np.isfinite([mean,sigma]).all() or np.any(mean<=0) or np.any(sigma<=0)
-                or (len(axes)==3 and np.any(2*mean>=mean.sum())) or not config.get('inertia_prior_source')):
-            raise ValueError('Invalid inertia prior; supply axis indices, physical values, positive uncertainties and source')
+    mean, sigma, axes = validate_inertia_prior(config)
     def decode(log_values):
         v = np.exp(log_values)
         j = v[:3]
@@ -437,6 +467,7 @@ def main():
     parser.add_argument('--validation', type=Path, required=True)
     parser.add_argument('--config', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--priors', type=Path, help='Optional parameter prior YAML; replaces embedded inertia priors')
     parser.add_argument('--train-rpm', type=Path)
     parser.add_argument('--validation-rpm', type=Path)
     parser.add_argument('--rpm-ros-minus-px4-s', type=float)
@@ -451,11 +482,18 @@ def main():
         parser.error('Training and validation must be independent ULogs')
     with args.config.open() as stream:
         config = yaml.safe_load(stream) or {}
+    prior_metadata = None
+    if args.priors is not None:
+        try:
+            config, prior_metadata = load_parameter_priors(config, args.priors)
+        except (ValueError, TypeError, OSError, yaml.YAMLError) as error:
+            parser.error(str(error))
     if bool(args.train_rpm) != bool(args.validation_rpm) or (args.train_rpm and args.esc_indices):
         parser.error('Supply both RPM CSVs or --esc-indices, not a mixture')
     training = read_ulog(args.train,args.train_rpm,args.rpm_ros_minus_px4_s,args.esc_indices)
     validation = read_ulog(args.validation,args.validation_rpm,args.rpm_ros_minus_px4_s,args.esc_indices)
     report = identify(training, validation, config)
+    report['parameter_prior_file'] = prior_metadata
     report['input_mapping'] = dict(training=training['input_mapping'], validation=validation['input_mapping'])
     report['training_sha256'] = hashlib.sha256(args.train.read_bytes()).hexdigest()
     report['validation_sha256'] = hashlib.sha256(args.validation.read_bytes()).hexdigest()

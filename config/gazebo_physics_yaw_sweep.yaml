@@ -58,11 +58,8 @@ protection:
 # 优先使用 --train-rpm/--validation-rpm 或 --esc-indices 的实测机械转速。
 rotation_fit_method: angular_acceleration  # 消除同时缩小偏航惯量/力矩系数降低力矩残差的偏差
 angular_accel_noise_rad_s2: 1.0  # 先验权重使用的观测残差尺度；不等于验证阈值
-# 可选独立扭摆先验（默认不启用）；轴0/1/2分别为roll/pitch/yaw。
-# inertia_prior_axes: [2]
-# inertia_prior_kg_m2: [实测Izz]
-# inertia_prior_std_kg_m2: [重复测量的标准差]
-# inertia_prior_source: "torsion pendulum measurement, date and setup"
+# 独立先验填写 config/parameter_priors.yaml；离线分析通过 --priors 显式加载。
+# 默认关闭；支持仅 Izz 或三轴惯量，需提供均值、1σ不确定度和来源。
 
 yaw_sweep:
   enabled: true

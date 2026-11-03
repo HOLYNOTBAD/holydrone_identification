@@ -29,7 +29,7 @@ for path in pathlib.Path('/tmp').glob('holydrone-identification.*/process.json')
         if record['root'] != str(root) or start_ticks(pid) != record['start_ticks']:
             continue
         command = pathlib.Path('/proc/%d/cmdline' % pid).read_bytes().split(b'\0')
-        if any(part.endswith((b'/brct1order_excite.sh', b'/gazebophysics_excite.sh')) for part in command):
+        if any(part.endswith((b'/brct1order_excite.sh', b'/brct2order_excite.sh', b'/gazebophysics_excite.sh')) for part in command):
             targets[pid] = record['start_ticks']
     except (FileNotFoundError, ProcessLookupError, PermissionError, ValueError, KeyError):
         continue

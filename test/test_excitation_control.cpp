@@ -84,4 +84,21 @@ TEST(Plans, YawSweepIntegerCyclesAndRecoverySegments) {
   EXPECT_THROW(identification::withYawSweep(base,{0.},4,.25),std::runtime_error);
   EXPECT_THROW(identification::withYawSweep(base,{1.},0,.25),std::runtime_error);
 }
+TEST(Plans, SecondOrderSingleAxisMultipleDurations) {
+  const auto plan=identification::secondOrderPlan({{.2,.2,.25}},.015,2,{.2,.35,.5});
+  ASSERT_EQ(plan.size(),24u);
+  for (const auto& g : plan) {
+    ASSERT_EQ(g.pulses.size(),2u);
+    int active=0;
+    for (int i=0;i<4;++i) {
+      EXPECT_DOUBLE_EQ(g.pulses[0][i],-g.pulses[1][i]);
+      if (g.pulses[0][i]!=0) ++active;
+    }
+    EXPECT_EQ(active,1);
+    EXPECT_TRUE(g.hold_s==.2 || g.hold_s==.35 || g.hold_s==.5);
+    EXPECT_TRUE(g.repetition==0 || g.repetition==1);
+  }
+  EXPECT_THROW(identification::secondOrderPlan({{.2,.2,.25}},.015,2,{}),std::runtime_error);
+  EXPECT_THROW(identification::secondOrderPlan({{.2,.2,.25}},.015,2,{.01}),std::runtime_error);
+}
 int main(int argc,char**argv) { testing::InitGoogleTest(&argc,argv); return RUN_ALL_TESTS(); }

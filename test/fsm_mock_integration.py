@@ -84,8 +84,8 @@ class IdentificationMock(unittest.TestCase):
                     return p
                 def enter():
                     state.armed=True;wait(lambda:statuses[-1]['thrust_ready']);state.mode='OFFBOARD';wait(lambda:statuses[-1]['thrust_locked'])
-                for kind,count in [('brct1order',4),('gazebo_physics',12)]:
-                    node=launch(kind)
+                for kind,count in [('brct1order',4),('brct2order',12),('gazebo_physics',12)]:
+                    node=launch(kind, **({'pulse_durations_s':[.1,.15,.2]} if kind=='brct2order' else {}))
                     time.sleep(.1);self.assertFalse(commands)
                     enter();wait(lambda:statuses[-1]['sequence_complete'])
                     groups={s['segment'] for s in statuses if s['phase']=='pulse'}
@@ -94,7 +94,7 @@ class IdentificationMock(unittest.TestCase):
                     self.assertLess(max(b[0]-a[0] for a,b in zip(commands,commands[1:])),.15)
                     # Frozen thrust pair retains the commanded increment; autopilot feedback cannot overwrite capture.
                     values=[m.thrust for _,m in commands]
-                    amp=.015 if kind=='brct1order' else .025
+                    amp=.025 if kind=='gazebo_physics' else .015
                     self.assertTrue(any(abs(v-(.34+amp))<1e-5 for v in values))
                     self.assertTrue(any(abs(v-(.34-amp))<1e-5 for v in values))
                     close(node);node=None

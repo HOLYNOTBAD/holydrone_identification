@@ -3,7 +3,7 @@ from setuptools import setup
 from catkin_pkg.python_setup import generate_distutils_setup
 
 setup(**generate_distutils_setup(
-    py_modules=['response'],
+    py_modules=['response', 'response2'],
     # 空键供 setuptools 定位模块，模块名键供 Catkin 生成 devel 转发入口。
-    package_dir={'': 'src', 'response': 'src'},
+    package_dir={'': 'src', 'response': 'src', 'response2': 'src'},
 ))

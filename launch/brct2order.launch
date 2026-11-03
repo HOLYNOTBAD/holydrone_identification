@@ -1,0 +1,9 @@
+<launch>
+  <arg name="config" default="$(find holydrone_identification)/config/brct2order.yaml"/>
+  <arg name="exit_mode" default="POSCTL"/>
+  <include file="$(find holydrone_identification)/launch/identification_fsm.launch">
+    <arg name="config" value="$(arg config)"/>
+    <arg name="exit_mode" value="$(arg exit_mode)"/>
+    <arg name="exciter" value="brct2order_excite"/>
+  </include>
+</launch>

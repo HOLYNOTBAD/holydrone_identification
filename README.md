@@ -182,7 +182,7 @@ python -m pip install numpy scipy pyyaml pyulog matplotlib
 两种激励均需人工起飞悬停、解锁并进入 OFFBOARD 后由状态机触发；退出 OFFBOARD 中止，
 正常完成后请求 POSCTL。恢复阶段通过高度、姿态及水平速度反馈回中。
 
-包内 `_scripts` 提供五个入口（以下从仓库根目录运行）：
+包内 `_scripts` 提供以下入口（二阶入口见文末）（以下从仓库根目录运行）：
 
 ```bash
 # 激励采集：默认 simulation；实飞设置 MODE=real_flight。
@@ -293,3 +293,57 @@ OUTPUT="$PWD/data/yaw_sweep_train" ./_scripts/gazebophysics_excite.sh
 本次验证目录：`deployment/data/identification/yaw_sweep_20261103`。是否扩展到其他轴，以该目录报告中的独立验证和参数误差为依据，不仅看频响拟合是否漂亮。
 
 本次结果：两次扫频航次均完成；独立复频响误差约 0.75%，但 Izz/km 真值误差仍为约 +41%/+62%，只比原双脉冲小幅改善。因此保留可选偏航扫频配置，尚未将其他轴默认改为扫频。详见 [扫频验证报告](../../data/identification/yaw_sweep_20261103/REPORT.md)。
+
+
+## BRCT 二阶试验入口
+
+新增 `src/brct2order_excite.cpp` 定义单轴多时长双脉冲，仍由同一个
+`identification_fsm` 执行回中、定高、反馈超时保护和退出模式请求。
+`config/brct2order.yaml` 保持一阶的幅值，使用 0.20/0.35/0.50 s 三种平台时长，
+每种时长依次覆盖 roll/pitch/yaw/thrust，重复 2 轮：共 24 组、48 个脉冲。
+需要人工起飞悬停并进入 OFFBOARD，不自动起飞。该新计划尚未完成实际 SITL/实飞试验。
+
+从仓库根目录执行（修改后先在 deployment 下 `catkin_make`）：
+
+```bash
+# 采集两个独立航次；实飞在命令前增加 MODE=real_flight。
+OUTPUT="$PWD/deployment/data/identification/brct2order/train01" \
+  deployment/src/holydrone_identification/_scripts/brct2order_excite.sh
+OUTPUT="$PWD/deployment/data/identification/brct2order/validation01" \
+  deployment/src/holydrone_identification/_scripts/brct2order_excite.sh
+# 停止一阶、二阶或物理辨识采集会话。
+deployment/src/holydrone_identification/_scripts/kill.sh
+
+# 使用相同训练/验证日志公平比较；输出必须是新文件。
+deployment/src/holydrone_identification/_scripts/brct1order_identification.sh \
+  --train /data/train.ulg --validation /data/validation.ulg --output /data/order1.yaml
+deployment/src/holydrone_identification/_scripts/brct2order_identification.sh \
+  --train /data/train.ulg --validation /data/validation.ulg --output /data/order2.yaml
+```
+
+离线入口 `scripts/brct2order_process.py` 复用一阶 ULog 脉冲提取器，
+`src/response2.py` 拟合 `y''+2ζωn y'+ωn²y=ωn²[Ku(t−d)+b]`。
+输出自然频率（rad/s 与 Hz）、阻尼比、时延、增益、偏置和独立验证指标。
+支持欠阻尼、临界阻尼与过阻尼；每组用首个实测输出初始化，初始导数固定为零。
+自然频率、阻尼比等触边时不判为通过；阈值沿用一阶的 NRMSE 和绝对 RMSE 门槛。
+自然频率上界受观测采样率约束。参数描述局部闭环响应，不是 Gazebo 电机物理参数。
+旧一阶或物理激励日志中完整的单轴双脉冲也可用于二阶拟合；不要把同一日志同时作为训练和验证。
+
+## 7. 独立参数先验文件
+
+填写 [parameter_priors.yaml](config/parameter_priors.yaml)。默认 `enabled: false`，测量值为 null，不会自动使用示例值。默认 `inertia_prior_axes: [2]` 只对应 Izz；需要三轴时改为 `[0, 1, 2]` 并依次填写三项均值、三项 1σ 不确定度（均为 kg·m²）。填写测量来源和机体配置后再启用。
+
+从功能包目录执行现有分析脚本，在原有参数中增加：
+
+```bash
+./_scripts/gazebophysics_identification.sh \
+  --config /data/physics_fit_config.yaml \
+  --priors config/parameter_priors.yaml \
+  --train /data/train.ulg --validation /data/validation.ulg \
+  --train-rpm /data/train_motor_speed.csv --validation-rpm /data/validation_motor_speed.csv \
+  --rpm-ros-minus-px4-s 0 --output /data/new_prior_report.yaml
+```
+
+时钟偏移 0 仅用于已核对的本机 lockstep 仿真；实飞沿用此前的 ESC 输入和时间对齐方式。主配置仍需填写已知质量、几何并选择 `rotation_fit_method: angular_acceleration`。
+
+`--priors` 显式指定的文件优先于主配置内的旧惯量先验：启用时替换，禁用时移除旧先验，便于做有/无先验对照；不传该参数则保持原行为。当前独立文件仅支持惯量先验，不接受尚未实现的其他参数先验。启用但缺值、轴重复或不确定度非正时拒绝分析。报告中 `parameter_prior_file` 保存路径、SHA-256 和开关，`rotation_fit` 保存实际使用的均值、不确定度、轴和来源。

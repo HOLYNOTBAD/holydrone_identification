@@ -15,6 +15,8 @@ struct Group {
   double sine_hz = 0;  // positive: one sine segment with amplitude in pulses[0]
 };
 std::vector<Group> firstOrderPlan(const std::array<double, 3>& rates, double thrust, int repetitions);
+std::vector<Group> secondOrderPlan(const std::array<double, 3>& rates, double thrust, int repetitions,
+                                   const std::vector<double>& durations);
 std::vector<Group> physicsPlan(const std::array<double, 3>& rates, double thrust, int repetitions,
                                const std::vector<double>& durations = {});
 std::vector<Group> withYawSweep(const std::vector<Group>& plan, const std::vector<double>& frequencies,

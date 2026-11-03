@@ -2,6 +2,8 @@
 import importlib.util
 from pathlib import Path
 import unittest
+import tempfile
+import yaml
 
 import numpy as np
 
@@ -97,6 +99,29 @@ class GazeboPhysicsTest(unittest.TestCase):
         self.assertTrue(report['rotation_fit']['inertia_prior_used'])
         self.assertEqual(report['rotation_fit']['inertia_prior_axes'],[2])
         np.testing.assert_allclose(report['rotation']['aggregate_inertia_diagonal_kg_m2'],[.018,.021,.032],rtol=.2)
+
+    def test_external_prior_file_enable_disable_and_validation(self):
+        template = Path(__file__).parents[1]/'config/parameter_priors.yaml'
+        prior = yaml.safe_load(template.read_text())
+        base = dict(rotation_fit_method='angular_acceleration', mass_kg=1.2,
+                    inertia_prior_axes=[2], inertia_prior_kg_m2=[.02],
+                    inertia_prior_std_kg_m2=[.002], inertia_prior_source='old measurement')
+        merged, metadata = PROCESS.load_parameter_priors(base, template)
+        self.assertFalse(metadata['enabled'])
+        self.assertNotIn('inertia_prior_kg_m2',merged)
+        self.assertEqual(merged['mass_kg'],1.2)
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'prior.yaml'
+            prior['enabled']=True;path.write_text(yaml.safe_dump(prior))
+            with self.assertRaises(ValueError): PROCESS.load_parameter_priors(base,path)
+            prior.update(inertia_prior_kg_m2=[.03],inertia_prior_std_kg_m2=[.004],
+                         inertia_prior_source='independent test fixture')
+            path.write_text(yaml.safe_dump(prior))
+            merged,metadata=PROCESS.load_parameter_priors(base,path)
+            self.assertEqual(merged['inertia_prior_kg_m2'],[.03])
+            self.assertEqual(len(metadata['sha256']),64)
+            prior['inertia_prior_axes']=[2.5];path.write_text(yaml.safe_dump(prior))
+            with self.assertRaises(ValueError): PROCESS.load_parameter_priors(base,path)
 
     def test_inertia_prior_requires_uncertainty_and_source(self):
         with self.assertRaisesRegex(ValueError,'standard deviation'):

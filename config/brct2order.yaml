@@ -1,0 +1,38 @@
+# 二阶响应激励参数，由 identification_fsm.launch 加载到统一 FSM 私有空间。
+# 先在已解锁 POSCTL 悬停并采集推力，再进入 OFFBOARD 自动执行。
+# BRCT 二阶响应辨识：手动进入 OFFBOARD 后自动执行。
+frequency: 200.0  # 发布或主循环频率；Hz；须为有限正数
+rate_amplitudes: [0.20, 0.20, 0.25]  # FLU roll/pitch/yaw 激励幅值；rad/s；三项均须为有限正数
+thrust_amplitude: 0.015  # 归一化推力正负增量；相对每组锁定的闭环推力基准，饱和则拒绝执行
+pulse_hold: 0.35  # FSM 通用参数；本计划实际时长由 pulse_durations_s 指定
+pulse_durations_s: [0.20, 0.35, 0.50]  # 每种时长覆盖四通道；保持原有激励幅值
+repetitions: 2  # 完整激励计划的重复次数；整数，须 ≥ 1
+
+# 与 autotune 共用高度/回中控制算法；全部运动量采用 ENU。
+altitude_control:
+  kp: 2.0
+  kd: 2.5
+  ki: 0.4
+  acceleration_limit: 3.0
+  integral_limit: 1.0
+  min_thrust: 0.05
+  max_thrust: 0.8
+recovery:
+  settle_s: 0.2  # 满足运动条件后短暂稳定，再开始下一组
+  timeout_s: 8.0
+  height_tolerance_m: 0.2
+  horizontal_tolerance_m: 0.75  # 回中后允许的 XY 偏移；不要求精确回原点
+  speed_tolerance_m_s: 0.5
+  tilt_tolerance_deg: 8.0
+  yaw_tolerance_deg: 5.0
+  position_gain: 0.8
+  velocity_gain: 1.8
+  attitude_gain: 4.0
+  max_tilt_deg: 12.0
+  max_rate_rad_s: 2.0
+protection:
+  feedback_timeout_s: 0.5
+  max_tilt_deg: 45.0
+  max_height_error_m: 1.0
+  max_distance_m: 5.0
+  max_vertical_speed_m_s: 2.0

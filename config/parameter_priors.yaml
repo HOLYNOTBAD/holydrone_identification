@@ -1,0 +1,19 @@
+# 物理参数先验：仅供离线 gazebo_physics_process.py --priors 使用，不改变飞控参数。
+# 目前支持惯量软约束；已知质量、旋翼几何仍填写在主分析配置中。
+# 填完实测值、不确定度及来源后，将 enabled 改为 true。
+enabled: false
+
+# 轴索引：0=roll/Ixx，1=pitch/Iyy，2=yaw/Izz；机体 FLU、以整机质心为原点。
+# 默认只测偏航。测三轴时改为 [0, 1, 2]，下面两个数组也按相同顺序填写三项。
+inertia_prior_axes: [2]
+
+# 均值，单位 kg·m²；null 是未填写，不能用 Gazebo 真值冒充实测值。
+inertia_prior_kg_m2: [null]
+
+# 1σ 不确定度，单位 kg·m²，必须 >0；越大约束越弱。
+# 应覆盖重复测量离散程度以及夹具、质心偏移等系统误差，不仅是均值的标准误。
+inertia_prior_std_kg_m2: [null]
+
+# 必填：方法、日期、机型/电池/负载、测量轴、夹具扣除及不确定度估计依据。
+# 测量配置必须与日志对应；实机测量值不可直接当成另一架仿真机的先验。
+inertia_prior_source: ""
