@@ -1,212 +1,75 @@
-#include <ros/ros.h>
-
-#include <mavros_msgs/AttitudeTarget.h>
-#include <std_msgs/Bool.h>
-#include <std_msgs/String.h>
-#include <std_srvs/Trigger.h>
-
-#include <algorithm>
-#include <array>
+/** @brief 物理辨识的纯波形定义；单轴每两脉冲回中，耦合四向组合分别追加反向脉冲，每对后回中。 */
+#include <holydrone_identification/excitation_plan.hpp>
 #include <cmath>
-#include <sstream>
+#include <set>
 #include <stdexcept>
-#include <string>
-#include <vector>
-
-class GazeboPhysicsExcite {
- public:
-  GazeboPhysicsExcite() : nh_(), private_nh_("~") {
-    private_nh_.param("frequency", frequency_, 50.0);
-    private_nh_.param("hover_thrust", hover_thrust_, 0.24);
-    private_nh_.param("thrust_amplitude", thrust_amplitude_, 0.025);
-    private_nh_.param("pulse_hold", pulse_hold_, 0.5);
-    private_nh_.param("baseline_seconds", baseline_seconds_, 0.5);
-    private_nh_.param("recovery_seconds", recovery_seconds_, 2.0);
-    private_nh_.param("repetitions", repetitions_, 2);
-    private_nh_.param<std::vector<double>>("rate_amplitudes", rate_amplitudes_,
-                                           std::vector<double>{0.30, 0.30, 0.25});
-    validateParameters();
-
-    command_pub_ = nh_.advertise<mavros_msgs::AttitudeTarget>(
-        "/mavros/setpoint_raw/attitude", 10);
-    status_pub_ = nh_.advertise<std_msgs::String>("/identification/status", 1, true);
-    finished_pub_ = private_nh_.advertise<std_msgs::Bool>("finished", 1, true);
-    start_service_ = private_nh_.advertiseService("start", &GazeboPhysicsExcite::start, this);
-    stop_service_ = private_nh_.advertiseService("stop", &GazeboPhysicsExcite::stop, this);
-    timer_ = nh_.createTimer(ros::Duration(1.0 / frequency_), &GazeboPhysicsExcite::tick, this);
-    publishFinished(false);
-  }
-
- private:
-  static constexpr int kExperimentCount = 5;
-
-  void validateParameters() {
-    const bool rates_ok = rate_amplitudes_.size() == 3 &&
-        std::all_of(rate_amplitudes_.begin(), rate_amplitudes_.end(),
-                    [](double value) { return std::isfinite(value) && value > 0.0; });
-    if (!std::isfinite(frequency_) || frequency_ <= 0.0 ||
-        !std::isfinite(hover_thrust_) || !std::isfinite(thrust_amplitude_) ||
-        hover_thrust_ - thrust_amplitude_ <= 0.0 ||
-        hover_thrust_ + thrust_amplitude_ >= 1.0 || pulse_hold_ <= 0.0 ||
-        baseline_seconds_ <= 0.0 || recovery_seconds_ <= 0.0 ||
-        repetitions_ < 1 || !rates_ok) {
-      throw std::runtime_error("invalid Gazebo physics excitation parameters");
-    }
-  }
-
-  bool start(std_srvs::Trigger::Request&, std_srvs::Trigger::Response& response) {
-    if (active_) {
-      response.success = false;
-      response.message = "excitation already active";
-      return true;
-    }
-    active_ = true;
-    recovering_ = false;
-    plan_index_ = 0;
-    phase_start_ = ros::Time::now();
-    publishFinished(false);
-    response.success = true;
-    response.message = "Gazebo physics excitation started";
-    return true;
-  }
-
-  bool stop(std_srvs::Trigger::Request&, std_srvs::Trigger::Response& response) {
-    active_ = false;
-    recovering_ = false;
-    response.success = true;
-    response.message = "Gazebo physics excitation stopped";
-    publishStatus("aborted");
-    return true;
-  }
-
-  std::string currentExperiment() const {
-    static const std::array<std::string, kExperimentCount> names{{
-        "thrust", "roll", "pitch", "yaw", "coupled"}};
-    return names[std::min(plan_index_ % kExperimentCount, kExperimentCount - 1)];
-  }
-
-  void publishFinished(bool finished) {
-    std_msgs::Bool message;
-    message.data = finished;
-    finished_pub_.publish(message);
-  }
-
-  void publishStatus(const std::string& phase) {
-    std_msgs::String message;
-    std::ostringstream json;
-    json << "{\"state\":\"" << (active_ ? "EXCITING" : "IDLE")
-         << "\",\"phase\":\"" << phase << "\",\"channel\":\""
-         << currentExperiment() << "\",\"segment\":" << plan_index_
-         << ",\"sequence_complete\":"
-         << (!active_ && plan_index_ >= repetitions_ * kExperimentCount ? "true" : "false")
-         << "}";
-    message.data = json.str();
-    status_pub_.publish(message);
-  }
-
-  void publishCommand(const std::array<double, 4>& action, const ros::Time& stamp) {
-    mavros_msgs::AttitudeTarget command;
-    command.header.stamp = stamp;
-    command.type_mask = mavros_msgs::AttitudeTarget::IGNORE_ATTITUDE;
-    command.body_rate.x = action[0];
-    command.body_rate.y = action[1];
-    command.body_rate.z = action[2];
-    command.thrust = action[3];
-    command_pub_.publish(command);
-  }
-
-  std::array<double, 4> excitation(int pulse) const {
-    std::array<double, 4> action{{0.0, 0.0, 0.0, hover_thrust_}};
-    const int experiment = plan_index_ % kExperimentCount;
-    const double sign = pulse % 2 == 0 ? 1.0 : -1.0;
-    if (experiment == 0) {
-      action[3] += sign * thrust_amplitude_;
-    } else if (experiment < 4) {
-      action[experiment - 1] = sign * rate_amplitudes_[experiment - 1];
-    } else {
-      static const std::array<std::array<double, 3>, 4> signs{{
-          {{1.0, 1.0, 1.0}}, {{1.0, -1.0, -1.0}},
-          {{-1.0, 1.0, -1.0}}, {{-1.0, -1.0, 1.0}}}};
-      for (int axis = 0; axis < 3; ++axis) {
-        action[axis] = signs[pulse % 4][axis] * rate_amplitudes_[axis];
+namespace identification {
+std::vector<Group> physicsPlan(const std::array<double, 3>& rates, double thrust, int repetitions, const std::vector<double>& durations) {
+  const char* names[] = {"thrust", "roll", "pitch", "yaw"};
+  std::vector<Group> plan;
+  if (!durations.empty()) {
+    for (int repeat=0; repeat<repetitions; ++repeat) {
+      auto pair = [&](const std::string& channel, Pulse p, double hold) {
+        Pulse n{}; for (size_t i=0; i<4; ++i) n[i]=-p[i];
+        plan.push_back({channel, repeat, {p,n}, hold});
+      };
+      // Different pulse widths produce different spectral content without increasing amplitude.
+      for (double hold : durations) for (int experiment=0; experiment<4; ++experiment) {
+        const int axis=experiment==0 ? 3 : experiment-1;
+        Pulse p{}; p[axis]=axis<3 ? rates[axis] : thrust;
+        pair(names[experiment],p,hold);
       }
-    }
-    return action;
-  }
-
-  void tick(const ros::TimerEvent&) {
-    const ros::Time now = ros::Time::now();
-    const std::array<double, 4> hover{{0.0, 0.0, 0.0, hover_thrust_}};
-    if (!active_) {
-      publishCommand(hover, now);
-      publishStatus("idle");
-      return;
-    }
-    if (recovering_) {
-      publishCommand(hover, now);
-      publishStatus("recover");
-      if ((now - phase_start_).toSec() >= recovery_seconds_) {
-        ++plan_index_;
-        if (plan_index_ >= repetitions_ * kExperimentCount) {
-          active_ = false;
-          recovering_ = false;
-          publishStatus("complete");
-          publishFinished(true);
-          ROS_INFO("Gazebo physics excitation sequence completed");
-        } else {
-          phase_start_ = now;
-          recovering_ = false;
-        }
+      int pattern=repeat;
+      for (int a=0; a<3; ++a) for (int b=a+1; b<3; ++b) for (int sign : {-1,1}) {
+        Pulse p{}; p[a]=rates[a]; p[b]=sign*rates[b];
+        pair("coupled",p,durations[pattern++ % durations.size()]);
       }
-      return;
+      const int signs[4][3]={{1,1,1},{1,-1,-1},{-1,1,-1},{-1,-1,1}};
+      for (const auto& sign : signs)
+        pair("coupled",Pulse{{sign[0]*rates[0],sign[1]*rates[1],sign[2]*rates[2],0}},
+             durations[pattern++ % durations.size()]);
     }
-
-    const double elapsed = (now - phase_start_).toSec();
-    const double pulse_duration = 4.0 * pulse_hold_;
-    const double cycle_end = 2.0 * baseline_seconds_ + pulse_duration;
-    std::array<double, 4> action = hover;
-    if (elapsed >= baseline_seconds_ && elapsed < baseline_seconds_ + pulse_duration) {
-      const int pulse = std::min(3, static_cast<int>((elapsed - baseline_seconds_) / pulse_hold_));
-      action = excitation(pulse);
+    return plan;
+  }
+  for (int repeat = 0; repeat < repetitions; ++repeat) {
+    for (int experiment = 0; experiment < 4; ++experiment) {
+      const int axis = experiment == 0 ? 3 : experiment-1;
+      Pulse positive{}, negative{};
+      positive[axis] = axis < 3 ? rates[axis] : thrust;
+      negative[axis] = -positive[axis];
+      for (int pair = 0; pair < 2; ++pair)
+        plan.push_back({names[experiment], repeat, {positive, negative}});
     }
-    publishCommand(action, now);
-    publishStatus("pulse");
-    if (elapsed >= cycle_end) {
-      recovering_ = true;
-      phase_start_ = now;
+    // 原四向组合覆盖三轴交叉项；每个方向增加反向平台，避免连续同向 roll 积累倾角和漂移。
+    const int signs[4][3] = {{1,1,1}, {1,-1,-1}, {-1,1,-1}, {-1,-1,1}};
+    for (const auto& sign : signs) {
+      Pulse positive{{sign[0]*rates[0], sign[1]*rates[1], sign[2]*rates[2], 0}};
+      Pulse negative{{-positive[0],-positive[1],-positive[2],0}};
+      plan.push_back({"coupled", repeat, {positive, negative}});
     }
   }
-
-  ros::NodeHandle nh_;
-  ros::NodeHandle private_nh_;
-  ros::Publisher command_pub_;
-  ros::Publisher status_pub_;
-  ros::Publisher finished_pub_;
-  ros::ServiceServer start_service_;
-  ros::ServiceServer stop_service_;
-  ros::Timer timer_;
-  std::vector<double> rate_amplitudes_;
-  double frequency_{50.0};
-  double hover_thrust_{0.24};
-  double thrust_amplitude_{0.025};
-  double pulse_hold_{0.5};
-  double baseline_seconds_{0.5};
-  double recovery_seconds_{2.0};
-  int repetitions_{2};
-  int plan_index_{0};
-  bool active_{false};
-  bool recovering_{false};
-  ros::Time phase_start_;
-};
-
-int main(int argc, char** argv) {
-  ros::init(argc, argv, "gazebo_physics_excite");
-  try {
-    GazeboPhysicsExcite node;
-    ros::spin();
-  } catch (const std::exception& error) {
-    ROS_FATAL("%s", error.what());
-    return 1;
+  return plan;
+}
+std::vector<Group> withYawSweep(const std::vector<Group>& plan, const std::vector<double>& frequencies,
+                                int cycles, double amplitude) {
+  if (frequencies.empty() || cycles<2 || cycles>10 || !std::isfinite(amplitude) || amplitude<=0 || amplitude>.4)
+    throw std::runtime_error("invalid yaw sweep amplitude/cycles/frequencies");
+  for(double f:frequencies) if(!std::isfinite(f) || f<.2 || f>5)
+    throw std::runtime_error("yaw sweep frequency must be within [0.2,5] Hz");
+  std::vector<Group> result;
+  std::set<int> replaced;
+  for(const auto& group:plan) {
+    if(group.channel!="yaw") { result.push_back(group); continue; }
+    if(!replaced.insert(group.repetition).second) continue;
+    for(double f:frequencies)
+      result.push_back({"yaw",group.repetition,{Pulse{{0,0,amplitude,0}}},cycles/f,f});
   }
-  return 0;
+  return result;
+}
+double waveformScale(const Group& group, double elapsed) {
+  if(group.sine_hz<=0) return 1.;
+  if(elapsed<=0 || elapsed>=group.hold_s) return 0.;
+  return std::sin(2*M_PI*group.sine_hz*elapsed);
+}
+
 }

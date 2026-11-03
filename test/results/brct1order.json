@@ -1,0 +1,17 @@
+{
+  "kind": "brct1order",
+  "complete": true,
+  "duration_s": 12.999999999999996,
+  "origin": [
+    -0.13925659656524658,
+    -0.031146977096796036,
+    3.5111083984375
+  ],
+  "altitude_min_m": 3.476287841796875,
+  "altitude_max_m": 3.561065673828125,
+  "max_drop_m": 0.034820556640625,
+  "max_tilt_deg": 4.805949853253307,
+  "max_xy_distance_m": 0.35821399711687196,
+  "pulses": 24,
+  "scope": "single local SITL run; default full sequence; empty world; not hardware validation"
+}

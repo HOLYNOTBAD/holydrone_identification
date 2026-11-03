@@ -1,0 +1,17 @@
+{
+  "kind": "gazebo_physics",
+  "complete": true,
+  "duration_s": 40.028000000000006,
+  "origin": [
+    -0.11635927110910416,
+    -0.003100130707025528,
+    3.533721923828125
+  ],
+  "altitude_min_m": 3.4630126953125,
+  "altitude_max_m": 3.75341796875,
+  "max_drop_m": 0.070709228515625,
+  "max_tilt_deg": 16.016617935160006,
+  "max_xy_distance_m": 0.883141727316353,
+  "pulses": 48,
+  "scope": "single local SITL run; default full sequence; empty world; not hardware validation"
+}

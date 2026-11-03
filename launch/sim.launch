@@ -1,18 +1,35 @@
+<!-- 启动 holydrone_identification 的 sim；参数按 arg 显式传递，节点参数位于各自私有空间。 -->
 <launch>
+  <!-- 必填的新会话输出目录；避免复用已存在记录 -->
   <arg name="output"/>
+  <!-- PX4 源码目录；默认优先读取 PX4_DIR 环境变量 -->
   <arg name="px4_dir" default="$(optenv PX4_DIR /home/holy/bvr/third_party/PX4-Autopilot)"/>
+  <!-- 是否启动 Gazebo 图形客户端 -->
   <arg name="gui" default="true"/>
+  <!-- 激励或候选 YAML 路径；传给被包含 launch 或节点配置 -->
   <arg name="config" default="$(find holydrone_identification)/config/brct1order.yaml"/>
+  <!-- 包含 $(find holydrone)/launch/sitl.launch，下列 arg 传递本入口的配置 -->
   <include file="$(find holydrone)/launch/sitl.launch">
+    <arg name="aircraft" value="holydrone_lite"/>
+    <!-- PX4 源码目录；默认优先读取 PX4_DIR 环境变量 -->
     <arg name="px4_dir" value="$(arg px4_dir)"/>
+    <!-- PX4 参数和运行文件目录；与源码构建目录分开 -->
     <arg name="px4_runtime_dir" value="$(arg output)/px4"/>
+    <!-- Gazebo 世界文件路径 -->
     <arg name="world" value="$(find holydrone)/gazebo/worlds/empty.world"/>
-    <arg name="spawn_z" value="0.055"/><arg name="gui" value="$(arg gui)"/>
+    <!-- 模型相对 Gazebo world 的初始 Z；m；应匹配地面高度 -->
+    <arg name="spawn_z" value="0.055"/>
+<!-- 是否启动 Gazebo 图形客户端 -->
+<arg name="gui" value="$(arg gui)"/>
   </include>
+  <!-- 包含 $(find holydrone)/launch/mavros_sim.launch，下列 arg 传递本入口的配置 -->
   <include file="$(find holydrone)/launch/mavros_sim.launch">
+    <!-- MAVROS 到飞控的连接 URL；仿真使用 UDP，实机可用串口 -->
     <arg name="fcu_url" value="udp://127.0.0.1:14540@127.0.0.1:14580"/>
   </include>
+  <!-- 包含 $(find holydrone_identification)/launch/identification_fsm.launch，下列 arg 传递本入口的配置 -->
   <include file="$(find holydrone_identification)/launch/identification_fsm.launch">
+    <!-- 激励或候选 YAML 路径；传给被包含 launch 或节点配置 -->
     <arg name="config" value="$(arg config)"/>
   </include>
 </launch>

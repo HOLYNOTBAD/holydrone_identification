@@ -1,12 +1,15 @@
+"""用独立合成 CSV 验证一阶响应拟合、完整脉冲筛选与验证集复用拒绝。
+只使用临时目录，不需要 ROS Master、仿真或硬件。"""
 import csv
 import tempfile
 import unittest
 from pathlib import Path
 import numpy as np
-from holydrone_identification.response import predict, identify_response, segments, read_csv
+from response import predict, identify_response, segments, read_csv
 
 
 class IdentificationTest(unittest.TestCase):
+    """使用临时目录保存训练与验证 CSV，测试结束后清理。"""
     def setUp(self):
         self.temporary=tempfile.TemporaryDirectory();self.root=Path(self.temporary.name)
     def tearDown(self):self.temporary.cleanup()

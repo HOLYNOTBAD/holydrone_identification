@@ -1,7 +1,12 @@
+<!-- 启动 holydrone_identification 的 gazebo_physics_real；参数按 arg 显式传递，节点参数位于各自私有空间。 -->
 <launch>
+  <!-- 激励或候选 YAML 路径；传给被包含 launch 或节点配置 -->
   <arg name="config" default="$(find holydrone_identification)/config/gazebo_physics.yaml"/>
+  <!-- 包含 $(find holydrone)/launch/mavros_real.launch，下列 arg 传递本入口的配置 -->
   <include file="$(find holydrone)/launch/mavros_real.launch"/>
+  <!-- 包含 $(find holydrone_identification)/launch/gazebo_physics.launch，下列 arg 传递本入口的配置 -->
   <include file="$(find holydrone_identification)/launch/gazebo_physics.launch">
+    <!-- 激励或候选 YAML 路径；传给被包含 launch 或节点配置 -->
     <arg name="config" value="$(arg config)"/>
   </include>
 </launch>

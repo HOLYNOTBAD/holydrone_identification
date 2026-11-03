@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
-"""Fit and validate the BRCT first-order model from two PX4 SD-card ULogs."""
+"""从两次独立 PX4 ULog 提取完整脉冲，拟合并验证 BRCT 一阶响应。
+将 FRD 日志转换为 FLU，按零阶保持对齐指令；输出报告，不修改控制参数。"""
 import argparse
 import csv
 import hashlib
 from pathlib import Path
 import tempfile
+import sys
+
+# Support the package source tree inside the analysis Conda environment.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import numpy as np
 import yaml
 
-from holydrone_identification.response import identify_response
+from response import identify_response
 
 
 CHANNELS = ('roll', 'pitch', 'yaw', 'thrust')
@@ -36,45 +41,53 @@ def previous_sample(source_t, values, target_t):
 
 
 def pulse_groups(t, commands):
-    airborne_thrust = commands[:, 3][commands[:, 3] > .05]
-    if not len(airborne_thrust):
+    """识别连续的等幅反向平台，排除回中闭环产生的平滑角速度。
+
+    角速度激励期间允许定高推力变化。推力组仍要求零角速度，并以整段
+    悬停推力中位数确定正负方向；过大的基准漂移会保守地丢弃该组。
+    """
+    t, commands = np.asarray(t), np.asarray(commands)
+    airborne = commands[:, 3][commands[:, 3] > .05]
+    if not len(airborne):
         return []
-    thrust_hover = float(np.median(airborne_thrust))
-    rate_size = np.abs(commands[:, :3])
-    dominant_rate = rate_size.argmax(axis=1)
-    ordered_rates = np.sort(rate_size, axis=1)
-    rate_pulse = ((ordered_rates[:, 2] > .03) & (ordered_rates[:, 1] < .005) &
-                  (np.abs(commands[:, 3]-thrust_hover) < .006))
-    thrust_pulse = ((rate_size.max(axis=1) < .005) &
-                    (np.abs(commands[:, 3]-thrust_hover) > .003) &
-                    (commands[:, 3] > .05))
-    active = rate_pulse | thrust_pulse
-    selected = np.where(thrust_pulse, 3, dominant_rate)
+    hover = float(np.median(airborne))
     groups = []
-    start = None
-    channel = None
-    for index in range(len(t)):
-        if active[index] and (start is None or selected[index] == channel):
-            if start is None:
-                start, channel = index, int(selected[index])
-        else:
-            if start is not None:
-                groups.append((channel, t[start], t[index-1]))
+    for channel in range(4):
+        other_axes = [axis for axis in range(3) if axis != channel]
+        isolated = np.max(np.abs(commands[:, other_axes]), axis=1) < .005
+        signal = commands[:, channel] - (hover if channel == 3 else 0)
+        minimum = .003 if channel == 3 else .03
+        tolerance = .0005 if channel == 3 else .002
+        eligible = isolated & (np.abs(signal) > minimum) & (commands[:, 3] > .05)
+        # 一个平台从首次采样开始计时；不能靠逐点微小变化把回中曲线误认为常值。
+        plateaus = []
+        start = None
+        for index in range(len(t)+1):
+            same = (index < len(t) and eligible[index] and
+                    (start is None or (t[index]-t[index-1] <= .08 and
+                                      abs(signal[index]-signal[start]) <= tolerance)))
+            if not same and start is not None:
+                if t[index-1]-t[start] >= .12:
+                    plateaus.append((start, index-1, float(np.median(signal[start:index]))))
                 start = None
-            if active[index]:
-                start, channel = index, int(selected[index])
-    if start is not None:
-        groups.append((channel, t[start], t[-1]))
-    complete = []
-    for channel, begin, end in groups:
-        values = commands[(t >= begin) & (t <= end), channel]
-        minimum_span = .008 if channel == 3 else .08
-        if end-begin >= .4 and np.ptp(values) >= minimum_span:
-            complete.append((channel, begin, end))
-    return complete
+            if index < len(t) and eligible[index] and start is None:
+                start = index
+        index = 0
+        while index+1 < len(plateaus):
+            a, b = plateaus[index:index+2]
+            da, db = t[a[1]]-t[a[0]], t[b[1]]-t[b[0]]
+            equal = abs(abs(a[2])-abs(b[2])) <= max(tolerance*2, .3*max(abs(a[2]),abs(b[2])))
+            if (a[2]*b[2] < 0 and equal and t[b[0]]-t[a[1]] <= .08 and
+                    min(da,db) >= .7*max(da,db) and t[b[1]]-t[a[0]] >= .4):
+                groups.append((channel, t[a[0]], t[b[1]]))
+                index += 2
+            else:
+                index += 1
+    return sorted(groups, key=lambda group: group[1])
 
 
 def ulog_to_csv(ulog_path, csv_path, padding=.25):
+    """将已解锁 OFFBOARD 的 ULog 片段转换为拟合 CSV，保留采样间隔与脉冲边界。"""
     try:
         from pyulog import ULog
     except ImportError as error:
@@ -89,6 +102,7 @@ def ulog_to_csv(ulog_path, csv_path, padding=.25):
     rate_t = field(angular, 'timestamp_sample') * 1e-6
     accel_t = (field(sensor, 'timestamp') +
                field(sensor, 'accelerometer_timestamp_relative')) * 1e-6
+    # ULog 使用 FRD：pitch/yaw 及负 Z 推力取反后形成 FLU [wx, wy, wz, thrust]。
     raw_commands = np.column_stack([
         field(setpoint, 'roll'), -field(setpoint, 'pitch'), -field(setpoint, 'yaw'),
         -field(setpoint, 'thrust_body', 2)])
@@ -96,12 +110,14 @@ def ulog_to_csv(ulog_path, csv_path, padding=.25):
     rates = np.column_stack([field(angular, 'xyz', 0),
                              -field(angular, 'xyz', 1),
                              -field(angular, 'xyz', 2)])
+    # FLU Z 比力包含悬停支撑分量，拟合 hover_thrust 时以 9.81 m/s² 为目标。
     fz = np.interp(rate_t, accel_t, -field(sensor, 'accelerometer_m_s2', 2))
     mode_t = field(control_mode, 'timestamp') * 1e-6
     offboard = previous_sample(mode_t,
                                field(control_mode, 'flag_control_offboard_enabled'), rate_t) > .5
     armed = previous_sample(mode_t, field(control_mode, 'flag_armed'), rate_t) > .5
 
+    # 只保留所有源流覆盖且已解锁 OFFBOARD 的样本，不外推缺失飞行阶段。
     valid_time = ((rate_t >= command_t[0]) & (rate_t <= command_t[-1]) &
                   (rate_t >= accel_t[0]) & (rate_t <= accel_t[-1]) & offboard & armed)
     rate_t, commands, rates, fz = (value[valid_time] for value in
@@ -120,7 +136,7 @@ def ulog_to_csv(ulog_path, csv_path, padding=.25):
             left = max(left, (groups[segment-1][2]+begin)/2)
         if segment+1 < len(groups):
             right = min(right, (end+groups[segment+1][1])/2)
-        indices = np.flatnonzero((rate_t >= left) & (rate_t <= right))
+        indices = np.flatnonzero((rate_t >= left) & (rate_t < right))
         if len(indices) < 20:
             continue
         for index in indices:

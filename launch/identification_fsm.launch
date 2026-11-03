@@ -1,16 +1,24 @@
+<!-- 启动 holydrone_identification 的 identification_fsm；参数按 arg 显式传递，节点参数位于各自私有空间。 -->
 <launch>
+  <!-- 激励或候选 YAML 路径；传给被包含 launch 或节点配置 -->
   <arg name="config" default="$(find holydrone_identification)/config/brct1order.yaml"/>
+  <!-- 波形选择（由统一 FSM 链接调用）；支持 brct1order_excite、gazebo_physics_excite -->
   <arg name="exciter" default="brct1order_excite"/>
+  <!-- 激励完成后请求的 PX4 模式；默认 POSCTL -->
   <arg name="exit_mode" default="POSCTL"/>
+  <!-- 连接后请求 MAVLink 消息间隔，不负责飞行控制 -->
   <node pkg="holydrone" type="configure_mavlink_streams.py" name="configure_identification_feedback" output="screen">
+    <!-- MAVLink 消息间隔；μs；交给 configure_mavlink_streams.py 设置 -->
     <param name="interval_us" value="20000"/>
+    <!-- ATTITUDE_TARGET推力目标50Hz；PX4不允许通过该命令修改HEARTBEAT间隔 -->
     <rosparam param="message_ids">[83]</rosparam>
   </node>
-  <node pkg="holydrone_identification" type="$(arg exciter)" name="$(arg exciter)" output="screen" required="true">
+  <!-- 按人工 OFFBOARD 边沿协调激励；required=true，退出时结束 launch -->
+  <node pkg="holydrone_identification" type="identification_fsm" name="identification_fsm" output="screen" required="true" clear_params="true">
     <rosparam command="load" file="$(arg config)"/>
-  </node>
-  <node pkg="holydrone_identification" type="identification_fsm" name="identification_fsm" output="screen" required="true">
+    <!-- 激励完成后请求的 PX4 模式；默认 POSCTL -->
     <param name="exit_mode" value="$(arg exit_mode)"/>
+    <!-- 波形选择（由统一 FSM 链接调用）；支持 brct1order_excite、gazebo_physics_excite -->
     <param name="exciter" value="$(arg exciter)"/>
   </node>
 </launch>
