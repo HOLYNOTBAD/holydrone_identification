@@ -16,10 +16,10 @@ find_package(catkin REQUIRED COMPONENTS
 # 使用 setup.py 安装本包 Python 模块，供离线处理脚本导入。
 catkin_python_setup()
 # Noetic 的独立模块 relay 在隔离字典中执行，不能导出函数；开发空间直接复制源码。
-configure_file(src/response.py
-  ${CATKIN_DEVEL_PREFIX}/${CATKIN_GLOBAL_PYTHON_DESTINATION}/response.py COPYONLY)
-configure_file(src/response2.py
-  ${CATKIN_DEVEL_PREFIX}/${CATKIN_GLOBAL_PYTHON_DESTINATION}/response2.py COPYONLY)
+configure_file(scripts/brct1order_regression.py
+  ${CATKIN_DEVEL_PREFIX}/${CATKIN_GLOBAL_PYTHON_DESTINATION}/brct1order_regression.py COPYONLY)
+configure_file(scripts/brct2order_regression.py
+  ${CATKIN_DEVEL_PREFIX}/${CATKIN_GLOBAL_PYTHON_DESTINATION}/brct2order_regression.py COPYONLY)
 # 导出本包供其他 Catkin 包使用的接口与依赖。
 catkin_package(INCLUDE_DIRS include DEPENDS EIGEN3 CATKIN_DEPENDS geometry_msgs mavros_msgs roscpp std_msgs std_srvs)
 

@@ -71,9 +71,9 @@ class IdentificationMock(unittest.TestCase):
                 server=rospy.Service('/mavros/set_mode',SetMode,mode)
                 package=Path(__file__).resolve().parents[1]
                 node=None
-                def launch(kind='brct1order',**extra):
+                def launch(kind='brct1order',hover_mode='POSCTL',**extra):
                     statuses.clear();commands.clear();mode_calls.clear();finished.clear()
-                    state.mode='POSCTL';state.armed=False
+                    state.mode=hover_mode;state.armed=False
                     motion.update(z=3.,x=0.,vz=0.,tilt=0.,enabled=True,old=False,rate=0.);thrust.update(value=.34,enabled=True)
                     cfg=yaml.safe_load((package/'config'/ (kind+'.yaml')).read_text());cfg.update(repetitions=1,pulse_hold=.15)
                     cfg['recovery'].update(settle_s=.05,timeout_s=1.)
@@ -85,9 +85,15 @@ class IdentificationMock(unittest.TestCase):
                 def enter():
                     state.armed=True;wait(lambda:statuses[-1]['thrust_ready']);state.mode='OFFBOARD';wait(lambda:statuses[-1]['thrust_locked'])
                 for kind,count in [('brct1order',4),('brct2order',12),('gazebo_physics',12)]:
-                    node=launch(kind, **({'pulse_durations_s':[.1,.15,.2]} if kind=='brct2order' else {}))
+                    node=launch(kind, hover_mode='AUTO.LOITER' if kind=='brct1order' else 'POSCTL',
+                                **({'pulse_durations_s':[.1,.15,.2]} if kind=='brct2order' else {}))
                     time.sleep(.1);self.assertFalse(commands)
-                    enter();wait(lambda:statuses[-1]['sequence_complete'])
+                    state.armed=True;wait(lambda:statuses[-1]['thrust_ready'])
+                    wait(lambda:len(commands)>10)
+                    self.assertAlmostEqual(commands[-1][1].thrust,.34,places=5)
+                    state.mode='OFFBOARD';wait(lambda:statuses[-1]['thrust_locked'])
+                    thrust['value']=.7  # OFFBOARD 回传不得覆盖进入前锁定的悬停推力。
+                    wait(lambda:statuses[-1]['sequence_complete'])
                     groups={s['segment'] for s in statuses if s['phase']=='pulse'}
                     self.assertEqual(groups,set(range(count)))
                     self.assertTrue(finished[-1]);self.assertGreaterEqual(len(mode_calls),2)
@@ -113,7 +119,7 @@ class IdentificationMock(unittest.TestCase):
                 close(node);node=None
                 # ATTITUDE_TARGET stops before the 1 Hz HEARTBEAT announces Offboard.
                 for delay, accepted in [(.8, True), (1.7, False)]:
-                    node=launch();state.armed=True
+                    node=launch(hover_mode='AUTO.LOITER');state.armed=True
                     wait(lambda:statuses[-1]['thrust_ready'])
                     thrust['enabled']=False;time.sleep(delay);state.mode='OFFBOARD'
                     if accepted:
@@ -122,6 +128,15 @@ class IdentificationMock(unittest.TestCase):
                         wait(lambda:statuses[-1]['phase']=='aborted')
                         self.assertFalse(any(s['phase']=='pulse' for s in statuses))
                     close(node);node=None
+                # Leaving Hold for an unsupported mode invalidates capture and pre-stream.
+                node=launch(hover_mode='AUTO.LOITER');state.armed=True
+                wait(lambda:statuses[-1]['thrust_ready']);wait(lambda:len(commands)>10)
+                state.mode='AUTO.TAKEOFF';wait(lambda:not statuses[-1]['thrust_ready'])
+                time.sleep(.1);count=len(commands);time.sleep(.1)
+                self.assertEqual(len(commands),count)
+                state.mode='OFFBOARD';wait(lambda:statuses[-1]['phase']=='aborted')
+                self.assertFalse(any(s['phase']=='pulse' for s in statuses))
+                close(node);node=None
                 node=launch();enter();wait(lambda:statuses[-1]['phase']=='pulse')
                 thrust['value']=.7;motion.update(z=2.8,vz=-.2,tilt=30.)
                 wait(lambda:commands[-1][1].thrust>.39)

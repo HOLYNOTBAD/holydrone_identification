@@ -7,22 +7,25 @@ ROS 1 辨识包，包含两条独立流程；飞行器、Gazebo、PX4 和 MAVROS
 | BRCT 一阶响应   | 角速度/总推力指令到实测响应的局部等效动态 | 四通道时间常数、纯时延、增益、偏置，以及悬停推力           |
 | Gazebo 物理辨识 | 四电机指令到推力和刚体转动的物理模型      | 共同电机时间常数、推力系数、对角惯量、偏航力矩系数、角阻尼 |
 
-两者均使用独立训练、验证 ULog，只输出 YAML 报告，不自动修改 PX4 参数或 Gazebo SDF。
+BRCT 一阶/二阶默认使用同一次 excite 的一份 ULog，按完整脉冲组划分训练和验证；物理辨识仍使用独立训练、验证 ULog。均不自动修改 PX4 参数或 Gazebo SDF。
+采集数据、PX4 运行文件和辨识报告统一放在本包 `data/`，与 `holydrone_autotune` 一致；
+实验产物由 Git 忽略，仅保留 `data/.gitkeep`。历史运行日志及训练快照中的旧路径按
+`deployment/data/identification/` → `deployment/src/holydrone_identification/data/` 对应，原始日志不改写。
 `holydrone_autotune` 的角速度环候选参数试验是另一套流程。
 
 ## 1. BRCT 一阶响应辨识
 
-实现：[激励节点](src/brct1order_excite.cpp) → [日志处理](scripts/brct1order_process.py) → [拟合与验证](src/response.py)。
+实现：[激励节点](src/brct1order_excite.cpp) → [日志处理](scripts/brct1order_process.py) → [拟合与验证](scripts/brct1order_regression.py)。
 
 ### 激励
 
 按 `roll → pitch → yaw → thrust` 依次激励，每次只改变一个通道。
 当前 [brct1order.yaml](config/brct1order.yaml)：roll/pitch 为 ±0.20 rad/s，yaw 为 ±0.25 rad/s，推力为每组基准 ±0.015。
-统一 [identification_fsm.cpp](src/identification_fsm.cpp) 以 200 Hz 调度：Position 悬停采集推力 → Offboard 锁定高度和航向 → 回中 → 正 0.35 s → 负 0.35 s → 回中 → 下一组。重复 3 轮，共 12 组、24 个脉冲。
+统一 [identification_fsm.cpp](src/identification_fsm.cpp) 以 200 Hz 调度：Position（POSCTL）或 Hold（AUTO.LOITER）悬停采集推力 → Offboard 锁定高度和航向 → 回中 → 正 0.35 s → 负 0.35 s → 回中 → 下一组。重复 3 轮，共 12 组、24 个脉冲。离线每通道前 2 组训练、最后 1 组验证，一次采集即可完成。
 
 回中必须同时满足高度误差 ≤0.2 m、XY 偏移 ≤0.75 m、速度 ≤0.5 m/s、机体角速度模长 ≤0.15 rad/s、倾角 ≤8°、航向误差 ≤5°，持续 0.2 s；8 s 未恢复则中止。在线不自动解锁或起飞，人工退出立即停止，完成后请求 POSCTL。
 角速度激励使用高度闭环及倾角补偿；推力双脉冲期间冻结闭环推力基准，回中时恢复高度反馈。
-正常推力采集新鲜度为 0.5 s；PX4 模式 HEARTBEAT 为 1 Hz，进入 Offboard 的缓存交接最多允许 1.5 s，且要求模式、位姿和速度反馈有效，不能无期限使用旧推力。
+已连接、已解锁的 POSCTL 或 AUTO.LOITER 均可采集推力并预发送 OFFBOARD 设定值；其他模式不采集，进入 OFFBOARD 后锁定，仍须人工先稳定悬停。正常推力采集新鲜度为 0.5 s；PX4 模式 HEARTBEAT 为 1 Hz，进入 Offboard 的缓存交接最多允许 1.5 s，且要求模式、位姿和速度反馈有效，不能无期限使用旧推力。
 
 ### 数据与数学方法
 
@@ -61,7 +64,7 @@ $$
 u_{\mathrm{hover}}=(9.81-b_T)/K_T
 $$
 
-固定训练参数，在独立日志上验证。NRMSE 为 RMSE 除以实测输出的 P95−P5 跨度：
+固定训练参数，在同航次留出的完整脉冲组上验证。NRMSE 为 RMSE 除以实测输出的 P95−P5 跨度：
 
 | 验证条件     | 角速度        | 推力         |
 | ------------ | ------------- | ------------ |
@@ -193,7 +196,7 @@ python -m pip install numpy scipy pyyaml pyulog matplotlib
 
 # 离线辨识：默认使用 holydrone_autotune Conda 环境。
 ./deployment/src/holydrone_identification/_scripts/brct1order_identification.sh \
-  --train /data/brct_train.ulg --validation /data/brct_validation.ulg --output /data/brct_report.yaml
+  --ulog /data/brct_flight.ulg --output /data/brct_report.yaml
 ./deployment/src/holydrone_identification/_scripts/gazebophysics_identification.sh \
   --train /data/physics_train.ulg --validation /data/physics_validation.ulg \
   --config /data/physics_fit_config.yaml --output /data/physics_report.yaml
@@ -201,9 +204,9 @@ python -m pip install numpy scipy pyyaml pyulog matplotlib
 
 激励入口支持 `CONFIG`、`OUTPUT`、`MODE` 环境变量及追加的 roslaunch 参数；仿真运行目录为
 `${OUTPUT}_px4`，物理激励额外记录 `${OUTPUT}_motor_speed.csv`。每次采集使用新前缀。
-任一任务退出或主脚本收到 Ctrl+C/TERM 后清理同次会话。实飞 ULog 保存在飞控 SD 卡。
+任一任务退出或主脚本收到 Ctrl+C/TERM 后清理同次会话。实飞 ULog 同时保存在飞控 SD 卡，并在落地 disarm 后自动下载到 `${OUTPUT}_px4/log/flight_001/` 下，保留飞控日志子目录。
 离线入口支持 `TRAIN`、`VALIDATION`、`OUTPUT`、`CONDA_EXE`、`CONDA_ENV` 环境变量，
-命令行参数优先；物理入口还支持 `CONFIG` 和原处理程序的转速/ESC 参数。输出路径必须不存在。
+命令行参数优先；BRCT 单日志输入支持 `ULOG` 环境变量和 `--ulog` 参数。物理入口还支持 `CONFIG` 和原处理程序的转速/ESC 参数。输出路径必须不存在。BRCT 另保存同前缀的 `_train.csv` 和 `_validation.csv`，报告记录具体脉冲组、时间范围和文件哈希。
 
 BRCT 采集与离线处理：
 
@@ -211,8 +214,7 @@ BRCT 采集与离线处理：
 roslaunch holydrone_identification real.launch
 # 仿真入口：roslaunch holydrone_identification sim.launch output:=/data/id_train
 rosrun holydrone_identification brct1order_process.py \
-  --train /data/brct_train.ulg --validation /data/brct_validation.ulg \
-  --output /data/brct1order.yaml
+  --ulog /data/brct_flight.ulg --output /data/brct1order.yaml
 ```
 
 物理辨识：先填写 `config/gazebo_physics.yaml` 的实测质量，核对旋翼几何、电机顺序和转速映射。
@@ -225,11 +227,11 @@ rosrun holydrone_identification gazebo_physics_process.py \
   --output /data/gazebo_physics.yaml
 ```
 
-训练和验证应来自不同航次；脚本拒绝复用相同数据，并拒绝覆盖已有输出文件。
+BRCT 单日志模式不随机拆采样点，而是按通道及脉冲时长分层，将较晚的完整脉冲组留出验证。默认留出约 1/3，每个层至少保留一组训练和一组验证；每种通道/时长至少需要 2 个完整组。两集合没有共享脉冲或采样。报告明确这是同航次验证。物理辨识仍要求不同航次；所有入口拒绝覆盖已有输出。
 
 ## 4. Lite SITL 实测与复现（2026-11-03）
 
-本次测试数据在 `deployment/data/identification/validation_20261103`，详见该目录 `REPORT.md`：BRCT 四通道独立验证通过；物理激励完成，但物理参数整体 **未通过**，偏航惯量及力矩系数严重失真，禁止回写 SDF。
+本次测试数据在 `deployment/src/holydrone_identification/data/validation_20261103`，详见该目录 `REPORT.md`：BRCT 四通道独立验证通过；物理激励完成，但物理参数整体 **未通过**，偏航惯量及力矩系数严重失真，禁止回写 SDF。
 不满足惯量三角不等式时现在保留候选参数和 `physical_consistency` 诊断，同时输出 `passed: false`；低残差不能覆盖物理一致性失败。
 
 仿真测试入口（会自动起飞、执行激励、降落；仅用于本机 SITL）：
@@ -237,7 +239,7 @@ rosrun holydrone_identification gazebo_physics_process.py \
 ```bash
 source deployment/devel/setup.bash
 /usr/bin/python3 deployment/src/holydrone_identification/test/sitl_sequence.py \
-  --kind gazebo_physics --px4 /home/holy/PX4-Autopilot --output /tmp/new-physics-flight
+  --kind gazebo_physics --px4 /home/holy/PX4-Autopilot-holydrone-lite --output /tmp/new-physics-flight
 ```
 
 该入口在 PX4 启动前设置 `PX4_PARAM_SDLOG_PROFILE=17`，记录 250 Hz 电机数据，并保存实际 Gazebo link 质量、惯量和位姿。普通 SITL 启动也应在 PX4 启动前设置该环境变量；仅飞行前通过 MAVROS 修改 SDLOG_PROFILE 不会重建已启动 logger 的订阅。
@@ -270,7 +272,7 @@ python src/holydrone_identification/scripts/gazebo_physics_process.py \
 
 可选扭摆先验通过 `inertia_prior_axes`、`inertia_prior_kg_m2`、`inertia_prior_std_kg_m2`、`inertia_prior_source` 输入。只测 Izz 时 axes 为 `[2]`，均值与标准差各填一个实测值，单位 kg·m²；也可按 `[0,1,2]` 输入三轴。先验是带不确定度的附加残差，不是硬固定参数。必须匹配当前整机配置、质心和机体系；默认不启用，不自动用 SDF 真值填充。
 
-`passed` 仅指独立动态残差和物理约束检查通过，**不等于参数误差已通过**。最新测试在 `deployment/data/identification/rpm_validation_20261103/REPORT.md`：两航次完成，未用惯量先验。推力系数误差约 −0.24%，roll/pitch 惯量约 +9.5%/+7.0%，但 yaw 惯量与力矩系数仍约 +47%/+69%，因此不自动回写。`comparison.json` 单独给出参考误差与 10% 对照门槛。
+`passed` 仅指独立动态残差和物理约束检查通过，**不等于参数误差已通过**。最新测试在 `deployment/src/holydrone_identification/data/rpm_validation_20261103/REPORT.md`：两航次完成，未用惯量先验。推力系数误差约 −0.24%，roll/pitch 惯量约 +9.5%/+7.0%，但 yaw 惯量与力矩系数仍约 +47%/+69%，因此不自动回写。`comparison.json` 单独给出参考误差与 10% 对照门槛。
 
 ## 6. 偏航分段正弦扫频
 
@@ -290,9 +292,9 @@ OUTPUT="$PWD/data/yaw_sweep_train" ./_scripts/gazebophysics_excite.sh
 
 `test/analyze_yaw_sweep.py --root <测试结果目录>` 另外提取各频段的“实际电机差动推力 → 实测偏航角速度”复频响，丢弃每段首周期，以正弦/余弦加常数和慢趋势项拟合。使用训练频响拟合 `G(s)=a·exp(-d·s)/(s+b)`，在另一航次验证；这里 `a=km/Izz`、`b=Dz/Izz` 仅为有效模型解释，不提供两个绝对参数的独立尺度。输出 `sweep_response.json/png`，与物理参数真值比较分开判断。
 
-本次验证目录：`deployment/data/identification/yaw_sweep_20261103`。是否扩展到其他轴，以该目录报告中的独立验证和参数误差为依据，不仅看频响拟合是否漂亮。
+本次验证目录：`deployment/src/holydrone_identification/data/yaw_sweep_20261103`。是否扩展到其他轴，以该目录报告中的独立验证和参数误差为依据，不仅看频响拟合是否漂亮。
 
-本次结果：两次扫频航次均完成；独立复频响误差约 0.75%，但 Izz/km 真值误差仍为约 +41%/+62%，只比原双脉冲小幅改善。因此保留可选偏航扫频配置，尚未将其他轴默认改为扫频。详见 [扫频验证报告](../../data/identification/yaw_sweep_20261103/REPORT.md)。
+本次结果：两次扫频航次均完成；独立复频响误差约 0.75%，但 Izz/km 真值误差仍为约 +41%/+62%，只比原双脉冲小幅改善。因此保留可选偏航扫频配置，尚未将其他轴默认改为扫频。详见 [扫频验证报告](data/yaw_sweep_20261103/REPORT.md)。
 
 
 ## BRCT 二阶试验入口
@@ -306,28 +308,26 @@ OUTPUT="$PWD/data/yaw_sweep_train" ./_scripts/gazebophysics_excite.sh
 从仓库根目录执行（修改后先在 deployment 下 `catkin_make`）：
 
 ```bash
-# 采集两个独立航次；实飞在命令前增加 MODE=real_flight。
-OUTPUT="$PWD/deployment/data/identification/brct2order/train01" \
-  deployment/src/holydrone_identification/_scripts/brct2order_excite.sh
-OUTPUT="$PWD/deployment/data/identification/brct2order/validation01" \
+# 采集一个完整航次；实飞在命令前增加 MODE=real_flight。
+OUTPUT="$PWD/deployment/src/holydrone_identification/data/brct2order/train01" \
   deployment/src/holydrone_identification/_scripts/brct2order_excite.sh
 # 停止一阶、二阶或物理辨识采集会话。
 deployment/src/holydrone_identification/_scripts/kill.sh
 
-# 使用相同训练/验证日志公平比较；输出必须是新文件。
+# 使用同一份日志、相同划分公平比较；输出必须是新文件。
 deployment/src/holydrone_identification/_scripts/brct1order_identification.sh \
-  --train /data/train.ulg --validation /data/validation.ulg --output /data/order1.yaml
+  --ulog /data/flight.ulg --output /data/order1.yaml
 deployment/src/holydrone_identification/_scripts/brct2order_identification.sh \
-  --train /data/train.ulg --validation /data/validation.ulg --output /data/order2.yaml
+  --ulog /data/flight.ulg --output /data/order2.yaml
 ```
 
 离线入口 `scripts/brct2order_process.py` 复用一阶 ULog 脉冲提取器，
-`src/response2.py` 拟合 `y''+2ζωn y'+ωn²y=ωn²[Ku(t−d)+b]`。
-输出自然频率（rad/s 与 Hz）、阻尼比、时延、增益、偏置和独立验证指标。
+`scripts/brct2order_regression.py` 拟合 `y''+2ζωn y'+ωn²y=ωn²[Ku(t−d)+b]`。
+输出自然频率（rad/s 与 Hz）、阻尼比、时延、增益、偏置和留出验证指标。
 支持欠阻尼、临界阻尼与过阻尼；每组用首个实测输出初始化，初始导数固定为零。
 自然频率、阻尼比等触边时不判为通过；阈值沿用一阶的 NRMSE 和绝对 RMSE 门槛。
 自然频率上界受观测采样率约束。参数描述局部闭环响应，不是 Gazebo 电机物理参数。
-旧一阶或物理激励日志中完整的单轴双脉冲也可用于二阶拟合；不要把同一日志同时作为训练和验证。
+二阶按通道和 0.20/0.35/0.50 s 时长分别留出后续完整脉冲，默认每层两次重复各分一组训练、一组验证。旧日志有足够重复单轴双脉冲时也可直接使用 `--ulog`。仍兼容 `--train` 和 `--validation` 两航次模式；不将同一组数据重复用于训练和验证。
 
 ## 7. 独立参数先验文件
 
@@ -347,3 +347,30 @@ deployment/src/holydrone_identification/_scripts/brct2order_identification.sh \
 时钟偏移 0 仅用于已核对的本机 lockstep 仿真；实飞沿用此前的 ESC 输入和时间对齐方式。主配置仍需填写已知质量、几何并选择 `rotation_fit_method: angular_acceleration`。
 
 `--priors` 显式指定的文件优先于主配置内的旧惯量先验：启用时替换，禁用时移除旧先验，便于做有/无先验对照；不传该参数则保持原行为。当前独立文件仅支持惯量先验，不接受尚未实现的其他参数先验。启用但缺值、轴重复或不确定度非正时拒绝分析。报告中 `parameter_prior_file` 保存路径、SHA-256 和开关，`rotation_fit` 保存实际使用的均值、不确定度、轴和来源。
+
+## 实飞 ULog 自动下载
+
+一阶、二阶和物理激励 Shell 的 `MODE=real_flight` 都自动启用下载；
+`real.launch` 和 `gazebo_physics_real.launch` 也默认启用，可通过 `download_ulog:=false` 关闭。
+共用 `holydrone_autotune/download_flight_ulog.py`，因此两包需要一起构建。
+
+在机载计算机启动前配置 UART：
+
+```bash
+export MAVROS_FCU_URL=/dev/ttyS0:2000000
+export MAVROS_TGT_SYSTEM=2
+MODE=real_flight ./deployment/src/holydrone_identification/_scripts/brct1order_excite.sh
+```
+
+必须在起飞前等待 `ULog preflight inventory ready`；检测到飞行、落地且 disarm 后，
+下载本航次新增/增长且大小稳定的日志，每秒显示百分比、字节数、传输速度和剩余时间。
+下载完成会打印 `ULog saved`；在此之前不要关闭启动脚本。地面试解锁不会触发下载。
+重新解锁或反馈失效会中止，保留 `.ulg.part`；不会修改或删除 SD 卡上的日志。
+`OUTPUT` 默认带时间戳；日志保存在运行下载节点的计算机上，不会自动复制到以太网另一端。
+不能用同一份日志同时作为训练集和验证集。
+
+离线入口支持 `PYTHON=/usr/bin/python3`。已有 Conda 时默认沿用 Conda，无 Conda 时使用系统 Python；
+后者需安装 numpy、scipy、PyYAML、pyulog、matplotlib。
+
+2026-11-04：机载编译和模拟落地下载测试通过，但实际串口参数读取及 FTP 请求无响应，
+尚不能确认真实 ULog 下载或实飞就绪，见 [硬件检查](../../HARDWARE_CHECK.md)。

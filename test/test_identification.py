@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 import numpy as np
-from response import predict, identify_response, segments, read_csv
+from brct1order_regression import predict, identify_response, segments, read_csv
 
 
 class IdentificationTest(unittest.TestCase):

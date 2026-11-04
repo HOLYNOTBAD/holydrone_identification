@@ -6,9 +6,12 @@ set -e
 ####################### 参数区 #######################
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MODE="${MODE:-simulation}"  # simulation | real_flight
-# 仿真运行文件位于 ${OUTPUT}_px4，每次采集换一个目录；实飞日志保存在飞控 SD 卡。
-OUTPUT="${OUTPUT:-$ROOT/data/identification/gazebo_physics/flight01}"
+# 仿真运行文件位于 ${OUTPUT}_px4，每次采集换一个目录；实飞解除武装后自动下载到 ${OUTPUT}_px4。
+OUTPUT="${OUTPUT:-$ROOT/src/holydrone_identification/data/gazebo_physics/flight_$(date +%Y%m%d_%H%M%S)}"
 CONFIG="${CONFIG:-$ROOT/src/holydrone_identification/config/gazebo_physics.yaml}"
+
+DOWNLOAD_ULOG=false
+[[ "$MODE" != real_flight ]] || DOWNLOAD_ULOG=true
 
 ####################### 通用函数区 #######################
 # 清理本次登记的 launch PID，等待标签页退出后删除 SESSION 临时目录。
@@ -38,7 +41,9 @@ launch_tab() {
   # 单引号中的参数留给标签页内的 bash 展开。
   # shellcheck disable=SC2016
   gnome-terminal --tab --title="$title" --working-directory="$ROOT" --wait -- \
-    bash -c '
+    env "PX4_DIR=${PX4_DIR:-$HOME/PX4-Autopilot-holydrone-lite}" "MAVROS_FCU_URL=${MAVROS_FCU_URL:-/dev/ttyS0:2000000}" \
+      "MAVROS_TGT_SYSTEM=${MAVROS_TGT_SYSTEM:-2}" \
+      "ROS_MASTER_URI=${ROS_MASTER_URI:-http://localhost:11311}" bash -c '
       set -e
       printf "%s\n" "$$" > "$2"
       source /opt/ros/noetic/setup.bash
@@ -75,6 +80,7 @@ ticks = pathlib.Path('/proc/%d/stat' % pid).read_text().rsplit(')', 1)[1].split(
 path.write_text(json.dumps(dict(root=root, pid=pid, start_ticks=ticks)))
 PY
 
+[[ ! -e "${OUTPUT}_px4" ]] || { echo "Use a new OUTPUT prefix: $OUTPUT" >&2; exit 2; }
 RPM_OUTPUT=""
 if [[ "$MODE" == "simulation" ]]; then
   RPM_OUTPUT="${OUTPUT}_motor_speed.csv"
@@ -94,5 +100,5 @@ fi
 
 # 手动解锁、起飞悬停并进入 OFFBOARD 后开始激励；完成后请求 POSCTL。
 launch_tab "Gazebo-Physics" --wait holydrone_identification gazebo_physics.launch \
-  "config:=$CONFIG" "$@" "motor_speed_output:=$RPM_OUTPUT"
+  "config:=$CONFIG" "download_ulog:=$DOWNLOAD_ULOG" "output:=$OUTPUT" "$@" "motor_speed_output:=$RPM_OUTPUT"
 wait -n

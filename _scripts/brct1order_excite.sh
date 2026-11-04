@@ -6,9 +6,12 @@ set -e
 ####################### 参数区 #######################
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MODE="${MODE:-simulation}"  # simulation | real_flight
-# 仿真运行文件位于 ${OUTPUT}_px4，每次采集换一个目录；实飞日志保存在飞控 SD 卡。
-OUTPUT="${OUTPUT:-$ROOT/data/identification/brct1order/flight01}"
+# 仿真运行文件位于 ${OUTPUT}_px4，每次采集换一个目录；实飞解除武装后自动下载到 ${OUTPUT}_px4。
+OUTPUT="${OUTPUT:-$ROOT/src/holydrone_identification/data/brct1order/flight_$(date +%Y%m%d_%H%M%S)}"
 CONFIG="${CONFIG:-$ROOT/src/holydrone_identification/config/brct1order.yaml}"
+
+DOWNLOAD_ULOG=false
+[[ "$MODE" != real_flight ]] || DOWNLOAD_ULOG=true
 
 ####################### 通用函数区 #######################
 # 清理本次登记的 launch PID，等待标签页退出后删除 SESSION 临时目录。
@@ -38,7 +41,9 @@ launch_tab() {
   # 单引号中的参数留给标签页内的 bash 展开。
   # shellcheck disable=SC2016
   gnome-terminal --tab --title="$title" --working-directory="$ROOT" --wait -- \
-    bash -c '
+    env "PX4_DIR=${PX4_DIR:-$HOME/PX4-Autopilot-holydrone-lite}" "MAVROS_FCU_URL=${MAVROS_FCU_URL:-/dev/ttyS0:2000000}" \
+      "MAVROS_TGT_SYSTEM=${MAVROS_TGT_SYSTEM:-2}" \
+      "ROS_MASTER_URI=${ROS_MASTER_URI:-http://localhost:11311}" bash -c '
       set -e
       printf "%s\n" "$$" > "$2"
       source /opt/ros/noetic/setup.bash
@@ -69,7 +74,7 @@ ticks = pathlib.Path('/proc/%d/stat' % pid).read_text().rsplit(')', 1)[1].split(
 path.write_text(json.dumps(dict(root=root, pid=pid, start_ticks=ticks)))
 PY
 
-if [[ "$MODE" == "simulation" && -e "${OUTPUT}_px4" ]]; then
+if [[ -e "${OUTPUT}_px4" ]]; then
   echo "Use a new OUTPUT prefix: $OUTPUT" >&2
   exit 2
 fi
@@ -87,5 +92,5 @@ fi
 
 # 手动解锁、起飞悬停并进入 OFFBOARD 后开始激励；完成后请求 POSCTL。
 launch_tab "BRCT-1Order" --wait holydrone_identification identification_fsm.launch \
-  "config:=$CONFIG" "$@"
+  "config:=$CONFIG" "download_ulog:=$DOWNLOAD_ULOG" "output:=$OUTPUT" "$@"
 wait -n

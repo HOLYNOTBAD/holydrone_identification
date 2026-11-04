@@ -2,7 +2,7 @@
 import unittest
 import numpy as np
 from scipy.signal import StateSpace, lsim
-from response2 import predict, fit_channel, score, identify_response
+from brct2order_regression import predict, fit_channel, score, identify_response
 
 
 def independent(t, u, initial, wn, zeta, delay, gain, bias):

@@ -1,5 +1,5 @@
 /**
- * @brief 统一调度两类辨识波形：Position 采集推力 → Offboard 回中 → 脉冲组 → 回中 → 下一组。
+ * @brief 统一调度两类辨识波形：Position/Hold 采集推力 → Offboard 回中 → 脉冲组 → 回中 → 下一组。
  * 全程以 FLU 角速度和高度闭环推力控制；只在回中时启用姿态/水平速度反馈。
  * 不解锁、不起飞；完成或保护触发后异步请求退出 Offboard，人工退出立即停止激励。
  */
@@ -34,13 +34,13 @@ class Identification {
   std::string mavros_, exciter_, exit_mode_, phase_ = "waiting", reason_;
   std::vector<identification::Group> plan_;
   size_t group_ = 0, pulse_ = 0;
-  bool offboard_ = false, position_armed_ = false, locked_ = false;
+  bool offboard_ = false, hover_armed_ = false, locked_ = false;
   bool active_ = false, pulsing_ = false, exiting_ = false, complete_ = false;
   double hover_ = 0, sent_thrust_ = 0, thrust_base_ = 0;
   double state_time_ = 0, thrust_time_ = 0, pose_time_ = 0, velocity_time_ = 0;
   double stage_time_ = 0, stable_time_ = 0, last_request_ = 0, last_status_ = 0;
   ros::Time wave_start_;
-  ros::Time position_since_, thrust_stamp_, pose_stamp_, velocity_stamp_, control_stamp_;
+  ros::Time hover_since_, thrust_stamp_, pose_stamp_, velocity_stamp_, control_stamp_;
   Eigen::Vector3d position_ = Eigen::Vector3d::Zero(), origin_ = Eigen::Vector3d::Zero();
   Eigen::Vector3d velocity_ = Eigen::Vector3d::Zero();
   Eigen::Quaterniond attitude_ = Eigen::Quaterniond::Identity();
@@ -127,7 +127,7 @@ class Identification {
       plan_=identification::withYawSweep(plan_,frequencies,cycles,amplitude);
     }
     for (const auto& old : {"hover_thrust", "baseline_seconds", "recovery_seconds"})
-      if (priv_.hasParam(old)) ROS_WARN("%s is no longer used; thrust is captured in POSCTL, recovery is feedback-gated", old);
+      if (priv_.hasParam(old)) ROS_WARN("%s is no longer used; thrust is captured in POSCTL/AUTO.LOITER, recovery is feedback-gated", old);
   }
   bool motionFresh() const {
     return pose_time_ > 0 && velocity_time_ > 0 && imu_time_ > 0 &&
@@ -136,7 +136,7 @@ class Identification {
   }
   bool stateFresh() const { return state_time_ > 0 && steady()-state_time_ < 2; }
   bool ready(double max_age = .5) const {
-    return stateFresh() && position_armed_ && thrust_time_ > 0 && steady()-thrust_time_ < max_age && motionFresh();
+    return stateFresh() && hover_armed_ && thrust_time_ > 0 && steady()-thrust_time_ < max_age && motionFresh();
   }
   bool validStamp(const ros::Time& stamp, const ros::Time& previous) const {
     const double age = (ros::Time::now()-stamp).toSec();
@@ -169,19 +169,20 @@ class Identification {
   }
   void thrust(const mavros_msgs::AttitudeTarget::ConstPtr& msg) {
     const double age = (ros::Time::now()-msg->header.stamp).toSec();
-    if (offboard_ || !position_armed_ || !stateFresh() || msg->header.stamp <= position_since_ ||
+    if (offboard_ || !hover_armed_ || !stateFresh() || msg->header.stamp <= hover_since_ ||
         msg->header.stamp <= thrust_stamp_ || age < -clock_lead_tolerance_ || age > .5 ||
         (msg->type_mask & mavros_msgs::AttitudeTarget::IGNORE_THRUST) ||
         !std::isfinite(msg->thrust) || msg->thrust <= 0 || msg->thrust > 1) return;
     const bool was_ready = ready();
     hover_ = msg->thrust; thrust_time_ = steady(); thrust_stamp_ = msg->header.stamp;
-    if (!was_ready && ready()) ROS_INFO("Pre-Offboard thrust ready: %.6f; establish stable Position hover before switching", hover_);
+    if (!was_ready && ready()) ROS_INFO("Pre-Offboard thrust ready: %.6f; establish stable Position/Hold hover before switching", hover_);
   }
   void state(const mavros_msgs::State::ConstPtr& msg) {
     const bool next = msg->connected && msg->armed && msg->mode == "OFFBOARD";
     const bool entering = next && !offboard_;
     const bool leaving = !next && offboard_;
-    const bool position = msg->connected && msg->armed && msg->mode == "POSCTL";
+    const bool hover_mode = msg->connected && msg->armed &&
+      (msg->mode == "POSCTL" || msg->mode == "AUTO.LOITER");
     if (entering) {
       // HEARTBEAT reports mode at 1 Hz; body-rate Offboard stops updating
       // ATTITUDE_TARGET immediately. Permit only this bounded handover delay.
@@ -190,10 +191,10 @@ class Identification {
         origin_ = position_; origin_yaw_ = yaw_; altitude_.integral = 0; control_stamp_ = ros::Time::now();
       }
     }
-    if (!position || !position_armed_ || !stateFresh()) {
-      thrust_time_ = 0; thrust_stamp_ = ros::Time(); position_since_ = ros::Time::now();
+    if (!hover_mode || !hover_armed_ || !stateFresh()) {
+      thrust_time_ = 0; thrust_stamp_ = ros::Time(); hover_since_ = ros::Time::now();
     }
-    position_armed_ = position; offboard_ = next; state_time_ = steady();
+    hover_armed_ = hover_mode; offboard_ = next; state_time_ = steady();
     if (leaving) {
       active_ = pulsing_ = false;
       const bool finished = exiting_ && complete_ && msg->connected && msg->mode == exit_mode_;

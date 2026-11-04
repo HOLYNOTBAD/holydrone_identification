@@ -3,7 +3,7 @@
   <!-- 必填的新会话输出目录；避免复用已存在记录 -->
   <arg name="output"/>
   <!-- PX4 源码目录；默认优先读取 PX4_DIR 环境变量 -->
-  <arg name="px4_dir" default="$(optenv PX4_DIR /home/holy/bvr/third_party/PX4-Autopilot)"/>
+  <arg name="px4_dir" default="$(optenv PX4_DIR /home/holy/PX4-Autopilot-holydrone-lite)"/>
   <!-- 是否启动 Gazebo 图形客户端 -->
   <arg name="gui" default="true"/>
   <!-- 激励或候选 YAML 路径；传给被包含 launch 或节点配置 -->

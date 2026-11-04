@@ -1,5 +1,11 @@
 <!-- 启动 holydrone_identification 的 identification_fsm；参数按 arg 显式传递，节点参数位于各自私有空间。 -->
 <launch>
+  <arg name="download_ulog" default="false"/>
+  <arg name="output" default="$(find holydrone_identification)/data/$(anon flight)"/>
+  <node if="$(arg download_ulog)" pkg="holydrone_autotune" type="download_flight_ulog.py"
+        name="identification_ulog" output="screen">
+    <param name="output" value="$(arg output)_px4"/>
+  </node>
   <!-- 激励或候选 YAML 路径；传给被包含 launch 或节点配置 -->
   <arg name="config" default="$(find holydrone_identification)/config/brct1order.yaml"/>
   <!-- 波形选择（由统一 FSM 链接调用）；支持 brct1order_excite、brct2order_excite、gazebo_physics_excite -->

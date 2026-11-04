@@ -1,5 +1,7 @@
 <!-- 启动 holydrone_identification 的 gazebo_physics；参数按 arg 显式传递，节点参数位于各自私有空间。 -->
 <launch>
+  <arg name="download_ulog" default="false"/>
+  <arg name="output" default="$(find holydrone_identification)/data/$(anon flight)"/>
   <arg name="motor_speed_output" default=""/>
   <node if="$(eval arg('motor_speed_output') != '')" pkg="holydrone_identification"
         type="record_motor_speed.py" name="record_motor_speed" output="screen" required="true">
@@ -11,6 +13,8 @@
   <arg name="exit_mode" default="POSCTL"/>
   <!-- 包含 $(find holydrone_identification)/launch/identification_fsm.launch，下列 arg 传递本入口的配置 -->
   <include file="$(find holydrone_identification)/launch/identification_fsm.launch">
+    <arg name="download_ulog" value="$(arg download_ulog)"/>
+    <arg name="output" value="$(arg output)"/>
     <!-- 激励或候选 YAML 路径；传给被包含 launch 或节点配置 -->
     <arg name="config" value="$(arg config)"/>
     <!-- 激励节点可执行文件/名称；支持 brct1order_excite、gazebo_physics_excite -->

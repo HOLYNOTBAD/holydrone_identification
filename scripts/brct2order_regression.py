@@ -1,9 +1,9 @@
-"""带纯时延二阶闭环响应；复用一阶模型的数据筛选与独立验证口径。"""
+"""带纯时延二阶闭环响应；复用一阶模型的数据筛选与留出验证口径。"""
 import hashlib
 from pathlib import Path
 import numpy as np
 from scipy.optimize import least_squares
-from response import CHANNELS, read_csv, segments
+from brct1order_regression import CHANNELS, read_csv, segments
 
 
 def predict(t, u, initial, omega_n, damping, delay, gain, bias):
@@ -68,7 +68,7 @@ def identify_response(train_path, validation_path, max_nrmse=.2, max_rate_rmse=.
                       max_thrust_rmse=1.):
     training_bytes, validation_bytes = Path(train_path).read_bytes(), Path(validation_path).read_bytes()
     if Path(train_path).resolve() == Path(validation_path).resolve() or training_bytes == validation_bytes:
-        raise ValueError('Validation must be a different acquisition, not the training data')
+        raise ValueError('Validation must contain held-out pulse groups, not the training data')
     train, validation = read_csv(train_path), read_csv(validation_path)
     channels = []
     for i, name in enumerate(CHANNELS):

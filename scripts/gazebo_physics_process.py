@@ -8,7 +8,10 @@ from pathlib import Path
 
 import numpy as np
 from scipy.optimize import lsq_linear, least_squares
-from scipy.integrate import cumulative_trapezoid
+try:
+    from scipy.integrate import cumulative_trapezoid
+except ImportError:  # 机载 Ubuntu 20.04 的 SciPy 使用旧函数名，计算语义相同。
+    from scipy.integrate import cumtrapz as cumulative_trapezoid
 import yaml
 
 

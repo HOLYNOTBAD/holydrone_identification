@@ -25,6 +25,8 @@
 
   <!-- 机型、MAVROS 与 SITL 启动资源 -->
   <exec_depend>holydrone</exec_depend>
+  <!-- 两种试验共用落地 ULog 下载节点 -->
+  <exec_depend>holydrone_autotune</exec_depend>
   <!-- 离线分析绘图 -->
   <exec_depend>python3-matplotlib</exec_depend>
   <!-- 离线数组计算和测试 -->

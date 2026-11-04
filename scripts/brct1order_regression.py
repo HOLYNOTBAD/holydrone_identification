@@ -1,4 +1,4 @@
-"""对连续完整脉冲拟合带时延的一阶闭环响应，并使用独立采集验证。
+"""对连续完整脉冲拟合带时延的一阶闭环响应，并使用留出的完整脉冲验证。
 输入 CSV 的角速度为 FLU rad/s、推力为归一化值、fz 为 FLU Z 比力 m/s²。
 仅认可训练/验证共同覆盖的输入范围；不把局部闭环近似视为全域物理模型。"""
 import hashlib
@@ -116,10 +116,10 @@ def score(pulses, params):
 
 def identify_response(train_path, validation_path, max_nrmse=.2, max_rate_rmse=.15,
                       max_thrust_rmse=1.):
-    """使用独立 CSV 验证四通道一阶响应，拒绝路径相同或内容相同的验证数据。"""
+    """使用分离的训练/验证 CSV，拒绝同一路径或相同内容。"""
     train_bytes, test_bytes = Path(train_path).read_bytes(), Path(validation_path).read_bytes()
     if Path(train_path).resolve()==Path(validation_path).resolve() or train_bytes==test_bytes:
-        raise ValueError('Validation must be a different acquisition, not the training data')
+        raise ValueError('Validation must contain held-out pulse groups, not the training data')
     train, test = read_csv(train_path), read_csv(validation_path)
     channels = []
     for i,name in enumerate(CHANNELS):
@@ -139,7 +139,7 @@ def identify_response(train_path, validation_path, max_nrmse=.2, max_rate_rmse=.
     hover = (9.81-channels[3]['bias'])/channels[3]['gain']
     return dict(passed=bool(all(c['passed'] for c in channels) and 0<hover<1 and
                             channels[3]['validated_input_range'][0]<hover<channels[3]['validated_input_range'][1]),
-                provenance='Independent flight/SITL acquisitions; ZOH first-order fit',
+                provenance='Disjoint training/validation data; ZOH first-order fit',
                 limitation='Local closed-loop approximation; no guarantee outside measured excitation range',
                 training_sha256=hashlib.sha256(train_bytes).hexdigest(),
                 validation_sha256=hashlib.sha256(test_bytes).hexdigest(),
