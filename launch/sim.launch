@@ -1,6 +1,6 @@
 <!-- 启动 holydrone_identification 的 sim；参数按 arg 显式传递，节点参数位于各自私有空间。 -->
 <launch>
-  <!-- 必填的新会话输出目录；避免复用已存在记录 -->
+  <!-- PX4 仿真运行目录 -->
   <arg name="output"/>
   <!-- PX4 源码目录；默认优先读取 PX4_DIR 环境变量 -->
   <arg name="px4_dir" default="$(optenv PX4_DIR /home/holy/PX4-Autopilot-holydrone-lite)"/>

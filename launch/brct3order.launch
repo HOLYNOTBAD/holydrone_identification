@@ -1,0 +1,7 @@
+<launch>
+  <arg name="config" default="$(find holydrone_identification)/config/brct3order.yaml"/>
+  <include file="$(find holydrone_identification)/launch/identification_fsm.launch">
+    <arg name="config" value="$(arg config)"/>
+    <arg name="exciter" value="brct3order_excite"/>
+  </include>
+</launch>

@@ -1,7 +1,5 @@
 <!-- 启动 holydrone_identification 的 real；参数按 arg 显式传递，节点参数位于各自私有空间。 -->
 <launch>
-  <arg name="download_ulog" default="true"/>
-  <arg name="output" default="$(find holydrone_identification)/data/$(anon flight)"/>
   <!-- 激励或候选 YAML 路径；传给被包含 launch 或节点配置 -->
   <arg name="config" default="$(find holydrone_identification)/config/brct1order.yaml"/>
   <!-- 包含 $(find holydrone)/launch/mavros_real.launch，下列 arg 传递本入口的配置 -->
@@ -10,7 +8,5 @@
   <include file="$(find holydrone_identification)/launch/identification_fsm.launch">
     <!-- 激励或候选 YAML 路径；传给被包含 launch 或节点配置 -->
     <arg name="config" value="$(arg config)"/>
-    <arg name="download_ulog" value="$(arg download_ulog)"/>
-    <arg name="output" value="$(arg output)"/>
   </include>
 </launch>

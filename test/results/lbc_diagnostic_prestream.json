@@ -1,0 +1,17 @@
+{
+  "normal": {
+    "hz": 199.0,
+    "count": 597
+  },
+  "future_imu": {
+    "hz": 0.0,
+    "count": 0
+  },
+  "recovered": {
+    "hz": 200.0,
+    "count": 600
+  },
+  "isolated_master": "http://127.0.0.1:57965",
+  "binary": "/home/holy/InterceptionRL/deployment/devel/lib/holydrone_identification/identification_fsm",
+  "passed": true
+}

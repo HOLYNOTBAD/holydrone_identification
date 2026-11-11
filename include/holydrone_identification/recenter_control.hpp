@@ -3,8 +3,8 @@
 #include <holydrone_identification/altitude_control.hpp>
 
 namespace identification {
-// 全程使用 ENU 位姿、FLU 机体系角速度；不切换 PX4 Offboard 控制类型。
-// 小角度位置/速度反馈只用于回中，激励期间保持原始的开环速率输入。
+// 使用 ENU 位姿、FLU 角速度；用于长偏航扫频期间的 roll/pitch 稳定。
+// 组间回中采用 PX4 位置控制，不调用此控制器。
 struct RecenterControl {
   double position_gain = .8, velocity_gain = 1.8, attitude_gain = 4.0;
   double max_tilt_deg = 12, max_rate = 2.0;

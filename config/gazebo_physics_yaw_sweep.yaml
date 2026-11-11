@@ -35,13 +35,13 @@ altitude_control:
   min_thrust: 0.05
   max_thrust: 0.8
 recovery:
-  max_body_rate_rad_s: 0.15  # 实测机体角速度模长，防止回正但仍在旋转
-  settle_s: 0.2  # 满足运动条件后短暂稳定，再开始下一组
-  timeout_s: 8.0
-  height_tolerance_m: 0.2
+  horizontal_speed_tolerance_m_s: 0.3
+  tilt_tolerance_deg: 5.0
+  angular_speed_tolerance_deg_s: 5.0
+  angular_rate_filter_tau_s: 0.05  # 仅回中判稳使用；各轴先低通再求合量，不改辨识数据
+  settle_s: 0.3  # 位置和航向连续满足门槛的反馈时间
+  height_tolerance_m: 0.15
   horizontal_tolerance_m: 0.75  # 回中后允许的 XY 偏移；不要求精确回原点
-  speed_tolerance_m_s: 0.5
-  tilt_tolerance_deg: 8.0
   yaw_tolerance_deg: 5.0
   position_gain: 0.8
   velocity_gain: 1.8
@@ -50,10 +50,7 @@ recovery:
   max_rate_rad_s: 2.0
 protection:
   feedback_timeout_s: 0.5
-  max_tilt_deg: 45.0
-  max_height_error_m: 1.0
-  max_distance_m: 5.0
-  max_vertical_speed_m_s: 2.0
+  angular_feedback_timeout_s: 0.1
 
 # 优先使用 --train-rpm/--validation-rpm 或 --esc-indices 的实测机械转速。
 rotation_fit_method: angular_acceleration  # 消除同时缩小偏航惯量/力矩系数降低力矩残差的偏差

@@ -1,3 +1,4 @@
+#include <holydrone_identification/settling_gate.hpp>
 #include <gtest/gtest.h>
 #include <stdexcept>
 #include <holydrone_identification/recenter_control.hpp>
@@ -21,6 +22,29 @@ TEST(Recenter, YawedBodyStillBrakesEast) {
   Eigen::Quaterniond q(Eigen::AngleAxisd(M_PI/2,Eigen::Vector3d::UnitZ()));
   auto r = c.rates(q, Eigen::Vector3d::Zero(), Eigen::Vector3d(1,0,0), M_PI/2);
   EXPECT_LT(r.x(), 0); EXPECT_NEAR(r.y(),0,1e-10); EXPECT_NEAR(r.z(),0,1e-10);
+}
+TEST(Recenter, HandoverRemovesResidualTiltInsteadOfFreezingIt) {
+  // 平面定高模型：3 度残余俯仰、0.1 m/s 漂移，角速度响应时间常数 0.08 s。
+  identification::RecenterControl control;
+  for (bool feedback : {false, true}) {
+    double pitch = 3*M_PI/180, rate = 0, x = .1, vx = .1;
+    identification::SettlingGate gate;
+    bool settled = false;
+    const double dt = .002;
+    for (double t = 0; t < 4; t += dt) {
+      Eigen::Quaterniond q(Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()));
+      const double command = feedback ? control.rates(q, Eigen::Vector3d(-x,0,0),
+          Eigen::Vector3d(vx,0,0), 0).y() : 0;
+      rate += dt*(command-rate)/.08;
+      pitch += dt*rate;
+      vx += dt*9.80665*std::tan(pitch);
+      x += dt*vx;
+      gate.observe(t, t >= .65 && std::abs(x) <= .75 && std::abs(vx) <= .3 &&
+          std::abs(pitch) <= 5*M_PI/180 && std::abs(rate) <= 5*M_PI/180, .1);
+      settled = settled || gate.ready(.3);
+    }
+    EXPECT_EQ(settled, feedback);
+  }
 }
 TEST(Plans, BalancedPairsAndPreservedCoupledSigns) {
   const std::array<double,3> rates{{.2,.3,.25}};
@@ -100,5 +124,81 @@ TEST(Plans, SecondOrderSingleAxisMultipleDurations) {
   }
   EXPECT_THROW(identification::secondOrderPlan({{.2,.2,.25}},.015,2,{}),std::runtime_error);
   EXPECT_THROW(identification::secondOrderPlan({{.2,.2,.25}},.015,2,{.01}),std::runtime_error);
+}
+TEST(Plans, ThirdOrderThreeRoundsWithBothSignsAndAllWidths) {
+  const std::array<double,4> amplitudes{{.2,.2,.25,.015}};
+  const std::vector<double> widths{.2,.35,.5};
+  const std::array<std::string,4> channels{{"roll","pitch","yaw","thrust"}};
+  const auto plan=identification::thirdOrderPlan({{.2,.2,.25}},.015,3,widths);
+  ASSERT_EQ(plan.size(),36u);
+  for (size_t i=0; i<plan.size(); ++i) {
+    const auto& g=plan[i];
+    EXPECT_EQ(g.repetition,static_cast<int>(i/12));
+    EXPECT_EQ(g.channel,channels[i%4]);
+    EXPECT_DOUBLE_EQ(g.hold_s,widths[(i/4)%3]);
+    ASSERT_EQ(g.pulses.size(),2u);
+    for (size_t axis=0;axis<4;++axis) {
+      EXPECT_DOUBLE_EQ(g.pulses[0][axis],axis==i%4 ? amplitudes[axis] : 0.);
+      EXPECT_DOUBLE_EQ(g.pulses[1][axis],-g.pulses[0][axis]);
+    }
+  }
+  EXPECT_THROW(identification::thirdOrderPlan({{.2,.2,.25}},.015,3,{}),std::runtime_error);
+  EXPECT_THROW(identification::thirdOrderPlan({{.2,.2,.25}},.015,3,{.8}),std::runtime_error);
+}
+TEST(Settling, OnlyContinuousFreshSamplesCount) {
+  identification::SettlingGate gate;
+  gate.observe(1.,true,.1); gate.observe(1.05,true,.1);
+  EXPECT_TRUE(gate.ready(.04));
+  gate.observe(1.05,true,.1); EXPECT_FALSE(gate.ready(.04)); // duplicate
+  gate.observe(1.1,true,.1); gate.observe(1.5,true,.1);
+  EXPECT_FALSE(gate.ready(.04)); // feedback gap
+  gate.observe(1.55,false,.1); EXPECT_FALSE(gate.ready(.04)); // outside gate
+  gate.observe(.5,true,.1); gate.observe(.55,true,.1);
+  EXPECT_TRUE(gate.ready(.04));
+  gate.observe(.4,true,.1); EXPECT_FALSE(gate.ready(.04)); // clock reset
+  EXPECT_FALSE(identification::freshSample(.2,.02,.1,.5));
+  EXPECT_FALSE(identification::freshSample(.02,.6,.1,.5));
+  EXPECT_TRUE(identification::freshSample(.02,.02,.1,.5));
+}
+TEST(Settling, AngularVibrationDoesNotPreventHoverButSustainedRotationDoes) {
+  // 零均值 105 Hz 波动：原始合量反复超过 5 deg/s，低频机体转动为零。
+  const double limit = 5*M_PI/180;
+  identification::AngularRateFilter filter;
+  identification::SettlingGate raw_gate, filtered_gate;
+  bool raw_ready = false, filtered_ready = false;
+  for (int i=0; i<400; ++i) {
+    const double t = i*.005;
+    const Eigen::Vector3d rate(8*M_PI/180*std::sin(2*M_PI*105*t),
+                               10*M_PI/180*std::cos(2*M_PI*105*t), 0);
+    const double filtered = filter.observe(t, rate, .05, .1);
+    raw_gate.observe(t, rate.norm() <= limit, .1);
+    filtered_gate.observe(t, filtered <= limit, .1);
+    raw_ready |= raw_gate.ready(.3);
+    filtered_ready |= filtered_gate.ready(.3);
+  }
+  EXPECT_FALSE(raw_ready);
+  EXPECT_TRUE(filtered_ready);
+  // 持续转动必须阻止启动，不能被当作高频波动消掉。
+  filtered_gate.reset();
+  for (int i=400; i<800; ++i) {
+    const double t = i*.005;
+    const double filtered = filter.observe(t, Eigen::Vector3d(0,0,12*M_PI/180), .05, .1);
+    filtered_gate.observe(t, filtered <= limit, .1);
+    EXPECT_FALSE(filtered_gate.ready(.3));
+  }
+}
+TEST(Settling, AngularFilterRestartsOnFeedbackDiscontinuity) {
+  identification::AngularRateFilter filter;
+  const Eigen::Vector3d spinning(.2,0,0), stopped = Eigen::Vector3d::Zero();
+  EXPECT_DOUBLE_EQ(filter.observe(1., spinning, .05, .1), .2);
+  filter.observe(1.02, stopped, .05, .1);
+  EXPECT_DOUBLE_EQ(filter.observe(1.2, spinning, .05, .1), .2); // gap
+  filter.observe(1.22, stopped, .05, .1);
+  EXPECT_DOUBLE_EQ(filter.observe(1.22, spinning, .05, .1), .2); // duplicate
+  filter.observe(1.24, stopped, .05, .1);
+  EXPECT_DOUBLE_EQ(filter.observe(.5, spinning, .05, .1), .2); // clock reset
+  filter.observe(.52, stopped, .05, .1);
+  filter.reset();
+  EXPECT_DOUBLE_EQ(filter.observe(.54, spinning, .05, .1), .2); // rejected sample
 }
 int main(int argc,char**argv) { testing::InitGoogleTest(&argc,argv); return RUN_ALL_TESTS(); }

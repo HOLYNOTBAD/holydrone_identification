@@ -18,11 +18,13 @@ import yaml
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--kind', choices=['brct1order', 'gazebo_physics'], required=True)
+    parser.add_argument('--kind', choices=['brct1order', 'brct2order', 'brct3order', 'gazebo_physics'], required=True)
     parser.add_argument('--px4', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--config', type=Path, help='explicit excitation config; default is selected by kind')
     parser.add_argument('--quick', action='store_true', help='one repetition')
+    parser.add_argument('--sequence-timeout', type=float, default=300.,
+                        help='wall-clock wait limit for the full excitation sequence, seconds')
     args = parser.parse_args()
     root = args.output.resolve()
     root.mkdir(parents=True, exist_ok=False)
@@ -139,7 +141,7 @@ def main():
         start = pose[0].header.stamp.to_sec()
         origin = pose[0].pose.position
         assert mode(0, 'OFFBOARD').mode_sent
-        wait(finished, 300, 'excitation sequence')
+        wait(finished, args.sequence_timeout, 'excitation sequence')
         end = pose[0].header.stamp.to_sec()
         flight = [s for s in samples if start <= s[0] <= end]
         complete = any(e.get('sequence_complete') for e in events)

@@ -40,7 +40,7 @@ def previous_sample(source_t, values, target_t):
     return values[np.clip(indices, 0, len(values)-1)]
 
 
-def pulse_groups(t, commands):
+def pulse_groups(t, commands, rate_control=None):
     """识别连续的等幅反向平台，排除回中闭环产生的平滑角速度。
 
     角速度激励期间允许定高推力变化。推力组仍要求零角速度，并以整段
@@ -52,6 +52,7 @@ def pulse_groups(t, commands):
         return []
     hover = float(np.median(airborne))
     groups = []
+    separate = rate_control is not None
     for channel in range(4):
         other_axes = [axis for axis in range(3) if axis != channel]
         isolated = np.max(np.abs(commands[:, other_axes]), axis=1) < .005
@@ -59,6 +60,8 @@ def pulse_groups(t, commands):
         minimum = .003 if channel == 3 else .03
         tolerance = .0005 if channel == 3 else .002
         eligible = isolated & (np.abs(signal) > minimum) & (commands[:, 3] > .05)
+        if separate:
+            eligible &= np.asarray(rate_control, bool)
         # 一个平台从首次采样开始计时；不能靠逐点微小变化把回中曲线误认为常值。
         plateaus = []
         start = None
@@ -77,9 +80,13 @@ def pulse_groups(t, commands):
             a, b = plateaus[index:index+2]
             da, db = t[a[1]]-t[a[0]], t[b[1]]-t[b[0]]
             equal = abs(abs(a[2])-abs(b[2])) <= max(tolerance*2, .3*max(abs(a[2]),abs(b[2])))
-            if (a[2]*b[2] < 0 and equal and t[b[0]]-t[a[1]] <= .08 and
-                    min(da,db) >= .7*max(da,db) and t[b[1]]-t[a[0]] >= .4):
-                groups.append((channel, t[a[0]], t[b[1]]))
+            if (a[2]*b[2] < 0 and equal and t[b[0]]-t[a[1]] <= (15. if separate else .08) and
+                    min(da,db) >= .7*max(da,db) and (separate or t[b[1]]-t[a[0]] >= .4)):
+                if separate:
+                    # 每个平台独立拟合，不把位置制动过程拼进响应模型。
+                    groups.extend([(channel, t[a[0]], t[a[1]]), (channel, t[b[0]], t[b[1]])])
+                else:
+                    groups.append((channel, t[a[0]], t[b[1]]))
                 index += 2
             else:
                 index += 1
@@ -122,7 +129,16 @@ def ulog_to_csv(ulog_path, csv_path, padding=.25):
                   (rate_t >= accel_t[0]) & (rate_t <= accel_t[-1]) & offboard & armed)
     rate_t, commands, rates, fz = (value[valid_time] for value in
                                    (rate_t, commands, rates, fz))
-    groups = pulse_groups(rate_t, commands)
+    # Offboard 请求记录比低频 vehicle_control_mode 更准确地标记交接边界。
+    offboard_modes = [d.data for d in ulog.data_list if d.name == 'offboard_control_mode' and d.multi_id == 0]
+    rate_control = None
+    if offboard_modes:
+        mode = offboard_modes[0]
+        mode_time = field(mode, 'timestamp')*1e-6
+        rate_control = previous_sample(mode_time, field(mode, 'body_rate'), rate_t) > .5
+        for key in ('position', 'velocity', 'acceleration', 'attitude'):
+            rate_control &= previous_sample(mode_time, field(mode, key), rate_t) < .5
+    groups = pulse_groups(rate_t, commands, rate_control)
     if not groups or set(channel for channel, _, _ in groups) != set(range(4)):
         raise ValueError('Could not find complete roll/pitch/yaw/thrust pulses in ULog')
 
@@ -136,13 +152,19 @@ def ulog_to_csv(ulog_path, csv_path, padding=.25):
             left = max(left, (groups[segment-1][2]+begin)/2)
         if segment+1 < len(groups):
             right = min(right, (end+groups[segment+1][1])/2)
+        if rate_control is not None:
+            center = np.searchsorted(rate_t, begin)
+            before = np.flatnonzero(~rate_control[:center])
+            after = np.flatnonzero(~rate_control[center:])
+            if len(before): left = max(left, rate_t[before[-1]+1])
+            if len(after): right = min(right, rate_t[center+after[0]])
         indices = np.flatnonzero((rate_t >= left) & (rate_t < right))
         if len(indices) < 20:
             continue
         for index in indices:
             rows.append([rate_t[index], *commands[index], *rates[index], fz[index],
                          segment, CHANNELS[channel], 1, 'pulse', 0,
-                         (end-begin+float(np.median(np.diff(rate_t[indices]))))/2])
+                         (end-begin+float(np.median(np.diff(rate_t[indices]))))/(1 if rate_control is not None else 2)])
     if rows:
         rows[-1][-2] = 1
     with csv_path.open('w', newline='') as stream:
@@ -222,7 +244,8 @@ def run_identification(identify, order):
         if path.suffix.lower() != '.ulg' or not path.is_file():
             parser.error(str(path)+' must be an existing PX4 .ulg file')
     datasets = [args.output.with_name(args.output.stem+suffix) for suffix in ('_train.csv', '_validation.csv')]
-    for path in [args.output, *datasets]:
+    plot_path = args.output.with_suffix('.png')
+    for path in [args.output, *datasets, plot_path]:
         if path.exists():
             parser.error('Output already exists; use a new path: '+str(path))
     with tempfile.TemporaryDirectory() as directory:
@@ -248,6 +271,9 @@ def run_identification(identify, order):
                 stream.write(source.read_bytes())
     with args.output.open('x') as stream:
         yaml.safe_dump(report, stream, sort_keys=False)
+    from brct1order_plot import plot_response
+    plot_response(*datasets, report, plot_path)
+    print('Response plot:', plot_path)
     print(f'BRCT {order} report:', args.output, 'passed:', report['passed'])
     if args.ulog:
         print('Pulse groups: training=', len(split['training_groups']),
