@@ -1,0 +1,51 @@
+{
+  "key": "summer",
+  "title": "仅暑假数据",
+  "count": 4,
+  "model": "F_N = k_f * (RPM * 2*pi/60)^2",
+  "gravity_m_s2": 9.81,
+  "method": "unweighted least squares through origin; each valid point has equal weight",
+  "k_f": 4.853938645851635e-06,
+  "k_f_units": "N/(rad/s)^2",
+  "k_rpm": 5.3229393579683345e-08,
+  "rpm_range": [
+    3157.0,
+    9850.0
+  ],
+  "voltage_range": [
+    16.8,
+    16.8
+  ],
+  "metrics": {
+    "rmse_n": 0.11936157811444854,
+    "max_abs_error_n": 0.19754915578542054,
+    "max_abs_relative_error": 0.2876041995329288,
+    "r_squared": 0.9957738816613665
+  },
+  "source_metrics": [
+    {
+      "experiment_id": "summer_measurement",
+      "count": 4,
+      "rmse_n": 0.11936157811444854,
+      "mean_residual_n": 0.05767232014141235
+    }
+  ],
+  "source_experiments": [
+    {
+      "experiment_id": "summer_measurement",
+      "source_type": "measurement",
+      "source": "用户在本次对话提供的暑假实测截图（4 行）",
+      "motor": null,
+      "propeller": null,
+      "measurement_date": null,
+      "notes": "截图动力输出记录为 throttle_percent（百分数，不是瓦特）。具体日期、硬件型号及测量设备未知；截图原文件未保存到仓库。",
+      "source_table": "data/blade/experiment/summer_measurement/static_thrust.csv",
+      "session_status": "source_table",
+      "session_reason": "",
+      "source_table_sha256": "5454290d220a0274e89aeb7c3a2d5449bf96e2999085e8c8a9fcba788e84d13f",
+      "sample_count": 4,
+      "fit_point_count": 4
+    }
+  ],
+  "dataset_sha256": "012f11c4a32c909f3a8ca4929e264217ff2dfe6c1fd953d6e118d18031ce6978"
+}

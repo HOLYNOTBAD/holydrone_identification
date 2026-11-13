@@ -1,0 +1,34 @@
+# 中档单轴正负脉冲；模型阶数仅在离线辨识时选择。
+# 人工起飞悬停并进入 OFFBOARD，每个脉冲后沿用原恢复逻辑。
+frequency: 200.0  # 发布或主循环频率；Hz；须为有限正数
+rate_amplitudes: [0.20, 0.20, 0.25]  # FLU roll/pitch/yaw 激励幅值；rad/s；三项均须为有限正数
+thrust_amplitude: 0.015  # 归一化推力正负增量；相对每组锁定的闭环推力基准，饱和则拒绝执行
+pulse_hold: 0.20  # 各通道统一脉冲保持时间；s；须 > 0
+repetitions: 3  # 同次采集中的重复次数；每个通道/时长至少 2 组才能划分训练与验证
+
+# 与 autotune 共用高度/回中控制算法；全部运动量采用 ENU。
+altitude_control:
+  kp: 2.0
+  kd: 2.5
+  ki: 0.4
+  acceleration_limit: 3.0
+  integral_limit: 1.0
+  min_thrust: 0.05
+  max_thrust: 0.8
+recovery:
+  horizontal_speed_tolerance_m_s: 0.3
+  tilt_tolerance_deg: 5.0
+  angular_speed_tolerance_deg_s: 5.0
+  angular_rate_filter_tau_s: 0.05  # 仅回中判稳使用；各轴先低通再求合量，不改辨识数据
+  settle_s: 0.3  # 位置和航向连续满足门槛的反馈时间
+  height_tolerance_m: 0.15
+  horizontal_tolerance_m: 0.75  # 回中后允许的 XY 偏移；不要求精确回原点
+  yaw_tolerance_deg: 5.0
+  position_gain: 0.8
+  velocity_gain: 1.8
+  attitude_gain: 4.0
+  max_tilt_deg: 12.0
+  max_rate_rad_s: 2.0
+protection:
+  feedback_timeout_s: 0.5
+  angular_feedback_timeout_s: 0.1

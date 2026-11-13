@@ -1,6 +1,6 @@
 # holydrone_identification SITL 验证
 
-本包激励阶段自行定高，回中采用 PX4 位置控制，头文件位于 `include/holydrone_identification/`。状态机负责模式交接、反馈新鲜度、激励调度与运动保护。
+本包激励阶段自行定高，回中采用 PX4 位置控制，头文件位于 `include/`。状态机负责模式交接、反馈新鲜度、激励调度与运动保护。
 
 - `altitude_control.hpp`：高度、垂直速度反馈、有界积分、倾角补偿和推力限幅。
 - `recenter_control.hpp`：仅在长偏航扫频激励期间抑制 roll/pitch 和水平漂移。
@@ -72,4 +72,4 @@ source "$HOME/.local/share/gazebo_ros_ws/devel/setup.bash" --extend
 
 三阶验证 NRMSE：roll 3.27%、pitch 2.63%、yaw 1.74%、thrust 5.28%，误差均达标；但 roll/yaw 阻尼比触及或贴近下界，整体 `passed: false`。相同 CSV 上的二阶对照 `passed: true`。实验完成与模型验证通过分别记录。
 
-图表、参数、原始 ULog、提取审计及复现脚本见 [完整实验报告](../data/brct3order/sitl_20261108_153607/REPORT.md)。
+图表、参数、原始 ULog、提取审计及复现脚本见 [完整实验报告](../data/ctbr/brct3order/sitl_20261108_153607/REPORT.md)。

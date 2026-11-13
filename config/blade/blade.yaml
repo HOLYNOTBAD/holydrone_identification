@@ -1,0 +1,28 @@
+# Blade 静态推力台架。先填写 commands，再检查电机/ESC 映射和电源参数。
+port: auto
+motor_index: 2                # 沿用当前 escmotor 配置，需核对实际接线
+esc_index: 0
+voltage_source: battery       # battery 或 esc；BDShot 只有转速时使用 battery
+battery_id: 0
+require_esc_current: false
+connection_timeout_s: 10.0
+telemetry_timeout_s: 0.5
+heartbeat_timeout_s: 3.0
+
+commands: [0.02, 0.04, 0.06, 0.08, 0.10, 0.12, 0.14, 0.16, 0.18, 0.20, 0.22, 0.24, 0.26, 0.28, 0.30, 0.32, 0.34, 0.36, 0.38, 0.40, 0.42, 0.44]  # 归一化油门，22 档，按顺序测量
+repetitions: 1               # 重复整个档位序列；轮次之间同样缓慢过渡
+voltage_v: 16.8
+voltage_tolerance_v: 0.5     # 运行期间电压偏离目标超过此值则停止
+ramp_up_per_s: 0.02         # 每秒增加 2 个百分点；只是初始设置，非电源额定保证
+ramp_down_per_s: 0.02
+settle_s: 3.0              # 到达目标后等待时间，不包含爬升
+steady_window_s: 2.0       # 提交前统计窗口，必须 <= settle_s
+steady_relative_span: 0.05 # RPM 极差/均值上限
+input_timeout_s: 120.0     # 每档等待读数的总时限，输错不重置
+min_samples: 5
+min_running_rpm: 100.0
+stop_rpm: 30.0
+stop_timeout_s: 10.0
+record_ulog: false          # 本机始终保存遥测；开启后沿用 escmotor 的 SD 卡日志配置要求
+motor_model: null
+propeller_model: null

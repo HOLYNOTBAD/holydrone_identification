@@ -1,0 +1,51 @@
+{
+  "key": "manufacturer",
+  "title": "仅厂商数据",
+  "count": 5,
+  "model": "F_N = k_f * (RPM * 2*pi/60)^2",
+  "gravity_m_s2": 9.81,
+  "method": "unweighted least squares through origin; each valid point has equal weight",
+  "k_f": 5.122943682242769e-06,
+  "k_f_units": "N/(rad/s)^2",
+  "k_rpm": 5.6179363903106836e-08,
+  "rpm_range": [
+    7600.0,
+    13800.0
+  ],
+  "voltage_range": [
+    16.8,
+    16.8
+  ],
+  "metrics": {
+    "rmse_n": 0.18690860231022738,
+    "max_abs_error_n": 0.3019200590434514,
+    "max_abs_relative_error": 0.10258921476162128,
+    "r_squared": 0.9954623543533089
+  },
+  "source_metrics": [
+    {
+      "experiment_id": "manufacturer",
+      "count": 5,
+      "rmse_n": 0.18690860231022738,
+      "mean_residual_n": 0.02036529706528567
+    }
+  ],
+  "source_experiments": [
+    {
+      "experiment_id": "manufacturer",
+      "source_type": "manufacturer",
+      "source": "README.md section 4.3.2; media/1794397011214.png",
+      "motor": "ECOII-2807-1700KV",
+      "propeller": "HQ 7x4x3, 3 blades",
+      "measurement_date": null,
+      "notes": "厂家表格人工转录。最后一行 RPM 原文为 Max，数值留空。采购型号与本表不同，不能视为当前机体标定。",
+      "source_table": "data/blade/experiment/manufacturer/static_thrust.csv",
+      "session_status": "source_table",
+      "session_reason": "",
+      "source_table_sha256": "0d6f4e3d9a3129fecc50e5d845dd01d001275bfa4c3e85ef76f87cff6b820454",
+      "sample_count": 6,
+      "fit_point_count": 5
+    }
+  ],
+  "dataset_sha256": "012f11c4a32c909f3a8ca4929e264217ff2dfe6c1fd953d6e118d18031ce6978"
+}

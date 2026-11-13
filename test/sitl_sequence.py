@@ -18,7 +18,7 @@ import yaml
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--kind', choices=['brct1order', 'brct2order', 'brct3order', 'gazebo_physics'], required=True)
+    parser.add_argument('--kind', choices=['flight', 'brct1order', 'brct2order', 'brct3order', 'gazebo_physics'], required=True)
     parser.add_argument('--px4', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--config', type=Path, help='explicit excitation config; default is selected by kind')
@@ -44,7 +44,7 @@ def main():
     from std_msgs.msg import String
     rp = rospkg.RosPack()
     package = 'holydrone_identification'
-    source = Path(rp.get_path(package))/'config'/(args.kind+'.yaml')
+    source = Path(rp.get_path(package))/'config'/('gazebo_physics/gazebo_physics.yaml' if args.kind=='gazebo_physics' else 'excitation/pulse_medium.yaml')
     if args.config is not None: source=args.config
     cfg = yaml.safe_load(source.read_text())
     if args.quick:

@@ -1,0 +1,26 @@
+{
+  "6": {
+    "status": "confirmed",
+    "original_thrust_g": 14144,
+    "corrected_thrust_g": 144,
+    "reason": "用户在对话中确认更正；static_thrust.csv 已更新，原始输入仍保留于本记录和 events.jsonl。"
+  },
+  "7": {
+    "status": "confirmed",
+    "original_thrust_g": 170170,
+    "corrected_thrust_g": 170,
+    "reason": "用户在对话中确认更正；static_thrust.csv 已更新，原始输入仍保留于本记录和 events.jsonl。"
+  },
+  "9": {
+    "status": "confirmed",
+    "original_thrust_g": 220220,
+    "corrected_thrust_g": 220,
+    "reason": "用户在对话中确认更正；static_thrust.csv 已更新，原始输入仍保留于本记录和 events.jsonl。"
+  },
+  "15": {
+    "status": "confirmed",
+    "original_thrust_g": 411411,
+    "corrected_thrust_g": 411,
+    "reason": "用户在对话中确认更正；static_thrust.csv 已更新，原始输入仍保留于本记录和 events.jsonl。"
+  }
+}

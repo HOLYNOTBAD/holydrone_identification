@@ -9,8 +9,36 @@ log/
 *.bag.active
 *.log
 
-# 本机实验原始数据、PX4 运行文件和分析产物。
+# 数据按功能分类；原始飞行/ESC 日志及默认分析产物留在本机。
 /data/*
 !/data/.gitkeep
-!/data/escmotor_dataset/
-!/data/escmotor_dataset/**
+!/data/blade/
+!/data/ctbr/
+!/data/escmotor/
+!/data/excitation/
+!/data/gazebo_physics/
+/data/*/*
+!/data/*/.gitkeep
+
+# Blade 转录原表、数据集和离线拟合报告。
+!/data/blade/experiment/
+!/data/blade/experiment/**
+!/data/blade/dataset/
+!/data/blade/dataset/**
+/data/blade/dataset/fits/
+!/data/blade/fit/
+!/data/blade/fit/**
+/data/blade/fit/legacy/
+
+# ESC 数据集与拟合报告；experiment 继续忽略。
+!/data/escmotor/dataset/
+!/data/escmotor/dataset/**
+!/data/escmotor/fit/
+!/data/escmotor/fit/**
+
+# 统一飞行数据集及原始会话目录骨架。
+!/data/excitation/dataset/
+!/data/excitation/dataset/**
+!/data/excitation/experiment/
+/data/excitation/experiment/*
+!/data/excitation/experiment/.gitkeep

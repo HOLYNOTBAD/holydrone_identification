@@ -1,0 +1,58 @@
+# 物理辨识激励与离线拟合配置；launch 加载到统一 FSM 私有空间。
+# mass/旋翼几何/电机映射由 gazebo_physics_process.py 显式读取，不由激励节点使用。
+# 实飞物理辨识：先起飞悬停，再手动进入 OFFBOARD。
+frequency: 200.0  # 发布或主循环频率；Hz；须为有限正数
+rate_amplitudes: [0.30, 0.30, 0.25]  # FLU roll/pitch/yaw 激励幅值；rad/s；三项均须为有限正数
+thrust_amplitude: 0.025  # 归一化推力正负增量；相对每组锁定的闭环推力基准，饱和则拒绝执行
+pulse_hold: 0.50  # 每个恒定幅值脉冲的持续时间；s；须 > 0
+pulse_durations_s: [0.20, 0.35, 0.50]  # 正负平台时长；多时间尺度，组间仍须稳定回中
+repetitions: 2  # 完整激励计划的重复次数；整数，须 ≥ 1
+
+# 处理日志前必须换成实机测量值。坐标系为机体 FLU，顺序对应 PX4 电机 0..3。
+mass_kg: 0.0  # 辨识用已知质量；kg；0 是占位值，处理前必须填写正值
+rotor_positions_flu_m:  # PX4 电机 0..3 的 FLU 位置；m；整体列表对应四个旋翼
+  - [0.09690, -0.11073, 0.0]
+  - [-0.09690, 0.11073, 0.0]
+  - [0.09690, 0.11073, 0.0]
+  - [-0.09690, -0.11073, 0.0]
+yaw_torque_signs: [-1, -1, 1, 1]  # 四电机 FLU 偏航反扭矩符号；各项只能为 -1 或 +1
+
+# Holydrone SDF 中归一化电机指令到目标机械角速度的比例。
+gazebo_input_scaling_rad_s: 1360.0  # 归一化电机指令到机械角速度的比例；rad/s；须 > 0
+gazebo_zero_position_armed_rad_s: 100.0  # 已解锁时的机械角速度偏置；rad/s；须 ≥ 0
+gazebo_max_rot_velocity_rad_s: 1360.0  # 转速映射的饱和上限；rad/s；须 > 0
+motor_tau_min_s: 0.003  # 共同电机时常搜索下界；s；须 > 0
+motor_tau_max_s: 0.15  # 共同电机时常搜索上界；s；须大于下界
+
+# 与 autotune 共用高度/回中控制算法；全部运动量采用 ENU。
+altitude_control:
+  kp: 2.0
+  kd: 2.5
+  ki: 0.4
+  acceleration_limit: 3.0
+  integral_limit: 1.0
+  min_thrust: 0.05
+  max_thrust: 0.8
+recovery:
+  horizontal_speed_tolerance_m_s: 0.3
+  tilt_tolerance_deg: 5.0
+  angular_speed_tolerance_deg_s: 5.0
+  angular_rate_filter_tau_s: 0.05  # 仅回中判稳使用；各轴先低通再求合量，不改辨识数据
+  settle_s: 0.3  # 位置和航向连续满足门槛的反馈时间
+  height_tolerance_m: 0.15
+  horizontal_tolerance_m: 0.75  # 回中后允许的 XY 偏移；不要求精确回原点
+  yaw_tolerance_deg: 5.0
+  position_gain: 0.8
+  velocity_gain: 1.8
+  attitude_gain: 4.0
+  max_tilt_deg: 12.0
+  max_rate_rad_s: 2.0
+protection:
+  feedback_timeout_s: 0.5
+  angular_feedback_timeout_s: 0.1
+
+# 优先使用 --train-rpm/--validation-rpm 或 --esc-indices 的实测机械转速。
+rotation_fit_method: angular_acceleration  # 消除同时缩小偏航惯量/力矩系数降低力矩残差的偏差
+angular_accel_noise_rad_s2: 1.0  # 先验权重使用的观测残差尺度；不等于验证阈值
+# 独立先验填写 config/gazebo_physics/parameter_priors.yaml；离线分析通过 --priors 显式加载。
+# 默认关闭；支持仅 Izz 或三轴惯量，需提供均值、1σ不确定度和来源。

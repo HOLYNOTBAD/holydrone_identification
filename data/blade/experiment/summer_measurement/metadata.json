@@ -1,0 +1,9 @@
+{
+  "experiment_id": "summer_measurement",
+  "source_type": "measurement",
+  "source": "用户在本次对话提供的暑假实测截图（4 行）",
+  "motor": null,
+  "propeller": null,
+  "measurement_date": null,
+  "notes": "截图动力输出记录为 throttle_percent（百分数，不是瓦特）。具体日期、硬件型号及测量设备未知；截图原文件未保存到仓库。"
+}

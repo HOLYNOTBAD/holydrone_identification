@@ -1,0 +1,9 @@
+{
+  "experiment_id": "manufacturer",
+  "source_type": "manufacturer",
+  "source": "README.md section 4.3.2; media/1794397011214.png",
+  "motor": "ECOII-2807-1700KV",
+  "propeller": "HQ 7x4x3, 3 blades",
+  "measurement_date": null,
+  "notes": "厂家表格人工转录。最后一行 RPM 原文为 Max，数值留空。采购型号与本表不同，不能视为当前机体标定。"
+}

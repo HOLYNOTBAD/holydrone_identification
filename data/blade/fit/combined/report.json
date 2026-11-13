@@ -1,0 +1,93 @@
+{
+  "key": "combined",
+  "title": "所有数据共同拟合",
+  "count": 29,
+  "model": "F_N = k_f * (RPM * 2*pi/60)^2",
+  "gravity_m_s2": 9.81,
+  "method": "unweighted least squares through origin; each valid point has equal weight",
+  "k_f": 5.0632005328168895e-06,
+  "k_f_units": "N/(rad/s)^2",
+  "k_rpm": 5.552420695809728e-08,
+  "rpm_range": [
+    2832.22,
+    13800.0
+  ],
+  "voltage_range": [
+    16.46699,
+    16.8
+  ],
+  "metrics": {
+    "rmse_n": 0.13670587076255597,
+    "max_abs_error_n": 0.3070404217999627,
+    "max_abs_relative_error": 0.3431150957592188,
+    "r_squared": 0.9970483840225226
+  },
+  "source_metrics": [
+    {
+      "experiment_id": "manufacturer",
+      "count": 5,
+      "rmse_n": 0.20588896346586802,
+      "mean_residual_n": -0.05995432376510586
+    },
+    {
+      "experiment_id": "summer_measurement",
+      "count": 4,
+      "rmse_n": 0.18113968139958542,
+      "mean_residual_n": 0.17117687291953948
+    },
+    {
+      "experiment_id": "bench_20261113_113812",
+      "count": 20,
+      "rmse_n": 0.09969169845882107,
+      "mean_residual_n": 0.05977754892517495
+    }
+  ],
+  "source_experiments": [
+    {
+      "experiment_id": "manufacturer",
+      "source_type": "manufacturer",
+      "source": "README.md section 4.3.2; media/1794397011214.png",
+      "motor": "ECOII-2807-1700KV",
+      "propeller": "HQ 7x4x3, 3 blades",
+      "measurement_date": null,
+      "notes": "厂家表格人工转录。最后一行 RPM 原文为 Max，数值留空。采购型号与本表不同，不能视为当前机体标定。",
+      "source_table": "data/blade/experiment/manufacturer/static_thrust.csv",
+      "session_status": "source_table",
+      "session_reason": "",
+      "source_table_sha256": "0d6f4e3d9a3129fecc50e5d845dd01d001275bfa4c3e85ef76f87cff6b820454",
+      "sample_count": 6,
+      "fit_point_count": 5
+    },
+    {
+      "experiment_id": "summer_measurement",
+      "source_type": "measurement",
+      "source": "用户在本次对话提供的暑假实测截图（4 行）",
+      "motor": null,
+      "propeller": null,
+      "measurement_date": null,
+      "notes": "截图动力输出记录为 throttle_percent（百分数，不是瓦特）。具体日期、硬件型号及测量设备未知；截图原文件未保存到仓库。",
+      "source_table": "data/blade/experiment/summer_measurement/static_thrust.csv",
+      "session_status": "source_table",
+      "session_reason": "",
+      "source_table_sha256": "5454290d220a0274e89aeb7c3a2d5449bf96e2999085e8c8a9fcba788e84d13f",
+      "sample_count": 4,
+      "fit_point_count": 4
+    },
+    {
+      "experiment_id": "bench_20261113_113812",
+      "source_type": "measurement",
+      "source": "PX4 ESC_STATUS + terminal manual thrust (g)",
+      "motor": null,
+      "propeller": null,
+      "measurement_date": "2026-11-13T11:38:16.840407+08:00",
+      "notes": "手工推力与提交前遥测窗口配对；电流为 ESC 电流，空值表示无有效反馈。",
+      "source_table": "data/blade/experiment/bench_20261113_113812/static_thrust.csv",
+      "session_status": "aborted",
+      "session_reason": "带载电压偏离目标，停止实验",
+      "source_table_sha256": "056f5feba3a8caaf5086962e077d71a5e2666b05f87e573ff1b5386448e6e65b",
+      "sample_count": 20,
+      "fit_point_count": 20
+    }
+  ],
+  "dataset_sha256": "012f11c4a32c909f3a8ca4929e264217ff2dfe6c1fd953d6e118d18031ce6978"
+}

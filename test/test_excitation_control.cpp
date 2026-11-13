@@ -1,8 +1,8 @@
-#include <holydrone_identification/settling_gate.hpp>
+#include <excitation/settling_gate.hpp>
 #include <gtest/gtest.h>
 #include <stdexcept>
-#include <holydrone_identification/recenter_control.hpp>
-#include <holydrone_identification/excitation_plan.hpp>
+#include <excitation/recenter_control.hpp>
+#include <excitation/excitation_plan.hpp>
 TEST(Recenter, DirectionQuaternionSignAndBound) {
   identification::RecenterControl c;
   const Eigen::Vector3d zero = Eigen::Vector3d::Zero();
@@ -48,7 +48,7 @@ TEST(Recenter, HandoverRemovesResidualTiltInsteadOfFreezingIt) {
 }
 TEST(Plans, BalancedPairsAndPreservedCoupledSigns) {
   const std::array<double,3> rates{{.2,.3,.25}};
-  auto first = identification::firstOrderPlan(rates,.015,3);
+  auto first = identification::pulsePlan(rates,.015,3);
   ASSERT_EQ(first.size(),12u);
   for (const auto& g : first) {
     ASSERT_EQ(g.pulses.size(),2u);
@@ -108,9 +108,9 @@ TEST(Plans, YawSweepIntegerCyclesAndRecoverySegments) {
   EXPECT_THROW(identification::withYawSweep(base,{0.},4,.25),std::runtime_error);
   EXPECT_THROW(identification::withYawSweep(base,{1.},0,.25),std::runtime_error);
 }
-TEST(Plans, SecondOrderSingleAxisMultipleDurations) {
-  const auto plan=identification::secondOrderPlan({{.2,.2,.25}},.015,2,{.2,.35,.5});
-  ASSERT_EQ(plan.size(),24u);
+TEST(Plans, PulsePlanSingleDuration) {
+  const auto plan=identification::pulsePlan({{.2,.2,.25}},.015,2);
+  ASSERT_EQ(plan.size(),8u);
   for (const auto& g : plan) {
     ASSERT_EQ(g.pulses.size(),2u);
     int active=0;
@@ -119,31 +119,26 @@ TEST(Plans, SecondOrderSingleAxisMultipleDurations) {
       if (g.pulses[0][i]!=0) ++active;
     }
     EXPECT_EQ(active,1);
-    EXPECT_TRUE(g.hold_s==.2 || g.hold_s==.35 || g.hold_s==.5);
+    EXPECT_DOUBLE_EQ(g.hold_s,0.);  // Use the FSM pulse_hold.
     EXPECT_TRUE(g.repetition==0 || g.repetition==1);
   }
-  EXPECT_THROW(identification::secondOrderPlan({{.2,.2,.25}},.015,2,{}),std::runtime_error);
-  EXPECT_THROW(identification::secondOrderPlan({{.2,.2,.25}},.015,2,{.01}),std::runtime_error);
 }
-TEST(Plans, ThirdOrderThreeRoundsWithBothSignsAndAllWidths) {
+TEST(Plans, PulsePlanThreeRoundsWithBothSigns) {
   const std::array<double,4> amplitudes{{.2,.2,.25,.015}};
-  const std::vector<double> widths{.2,.35,.5};
   const std::array<std::string,4> channels{{"roll","pitch","yaw","thrust"}};
-  const auto plan=identification::thirdOrderPlan({{.2,.2,.25}},.015,3,widths);
-  ASSERT_EQ(plan.size(),36u);
+  const auto plan=identification::pulsePlan({{.2,.2,.25}},.015,3);
+  ASSERT_EQ(plan.size(),12u);
   for (size_t i=0; i<plan.size(); ++i) {
     const auto& g=plan[i];
-    EXPECT_EQ(g.repetition,static_cast<int>(i/12));
+    EXPECT_EQ(g.repetition,static_cast<int>(i/4));
     EXPECT_EQ(g.channel,channels[i%4]);
-    EXPECT_DOUBLE_EQ(g.hold_s,widths[(i/4)%3]);
+    EXPECT_DOUBLE_EQ(g.hold_s,0.);
     ASSERT_EQ(g.pulses.size(),2u);
     for (size_t axis=0;axis<4;++axis) {
       EXPECT_DOUBLE_EQ(g.pulses[0][axis],axis==i%4 ? amplitudes[axis] : 0.);
       EXPECT_DOUBLE_EQ(g.pulses[1][axis],-g.pulses[0][axis]);
     }
   }
-  EXPECT_THROW(identification::thirdOrderPlan({{.2,.2,.25}},.015,3,{}),std::runtime_error);
-  EXPECT_THROW(identification::thirdOrderPlan({{.2,.2,.25}},.015,3,{.8}),std::runtime_error);
 }
 TEST(Settling, OnlyContinuousFreshSamplesCount) {
   identification::SettlingGate gate;

@@ -3,7 +3,7 @@ import importlib.util
 from pathlib import Path
 import unittest
 import numpy as np
-spec=importlib.util.spec_from_file_location('brct_process',Path(__file__).resolve().parents[1]/'scripts/brct1order_process.py')
+spec=importlib.util.spec_from_file_location('brct_process',Path(__file__).resolve().parents[1]/'scripts/ctbr/brct1order_process.py')
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 class PulseDetection(unittest.TestCase):

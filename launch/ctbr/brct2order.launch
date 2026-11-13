@@ -1,0 +1,7 @@
+<launch>
+  <arg name="config" default="$(find holydrone_identification)/config/excitation/pulse_medium.yaml"/>
+  <include file="$(find holydrone_identification)/launch/excitation/identification_fsm.launch">
+    <arg name="config" value="$(arg config)"/>
+    <arg name="exciter" value="brct2order_excite"/>
+  </include>
+</launch>

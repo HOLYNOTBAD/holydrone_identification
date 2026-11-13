@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>Blade 实验数据集</title>
+<style>
+body{font:15px system-ui,sans-serif;background:#f4f7fa;color:#192d3b;margin:28px auto;max-width:1400px;padding:0 20px}h1{margin-bottom:8px}section{background:white;border:1px solid #dde4eb;border-radius:10px;padding:18px;margin:18px 0}.scroll{overflow:auto}table{border-collapse:collapse;width:100%;white-space:nowrap}th,td{text-align:left;border-bottom:1px solid #e4e9ef;padding:9px}th{background:#edf2f6}select{padding:8px;font:inherit}.muted{color:#526779}.flag{background:#fff0dc}svg{width:100%;max-height:440px}label{margin-right:20px}td.reason{white-space:normal;min-width:190px}
+</style>
+<h1>Blade 实验数据集</h1><p class="muted">离线查看 · 原始读数保留 · 待核对点不进入曲线与拟合</p>
+<section><h2>实验索引</h2><div class="scroll"><table id="experiments"></table></div></section>
+<section><label>选择实验 <select id="filter"><option value="">全部实验</option></select></label><span id="count"></span><h2>转速—推力</h2><p class="muted">仅绘制可拟合点，线段用于连接测量点，不表示拟合模型。不同来源的硬件是否一致尚未确认。</p><svg id="chart" viewBox="0 0 1000 420" role="img" aria-label="转速推力散点图"></svg><div id="legend"></div></section>
+<section><h2>测量记录</h2><div class="scroll"><table id="samples"></table></div></section>
+<script id="data" type="application/json">__CATALOG_JSON__</script>
+<script>
+const data=JSON.parse(document.getElementById('data').textContent);
+const $=id=>document.getElementById(id), colors=['#007e87','#bd5c29','#6355b7','#9b3e6a'];
+const fmt=v=>v===null||v===undefined||v===''?'—':typeof v==='number'?Number(v.toFixed(4)).toString():String(v);
+function table(el,headers,rows){el.replaceChildren();const tr=document.createElement('tr');headers.forEach(h=>{const th=document.createElement('th');th.textContent=h;tr.append(th)});el.append(tr);rows.forEach(r=>{const row=document.createElement('tr');if(r.flag)row.className='flag';r.cells.forEach((v,i)=>{const td=document.createElement('td');td.textContent=fmt(v);if(i===r.cells.length-1)td.className='reason';row.append(td)});el.append(row)})}
+table($('experiments'),['实验','来源','状态','总点数','可拟合点','停止原因'],data.experiments.map(e=>({cells:[e.experiment_id,e.source_type,e.session_status,e.sample_count,e.fit_point_count,e.session_reason]})));
+data.experiments.forEach(e=>{const o=document.createElement('option');o.value=e.experiment_id;o.textContent=e.experiment_id;$('filter').append(o)});
+function svg(tag,attrs,text){const n=document.createElementNS('http://www.w3.org/2000/svg',tag);Object.entries(attrs).forEach(([k,v])=>n.setAttribute(k,v));if(text!==undefined)n.textContent=text;$('chart').append(n);return n}
+function render(){const selected=$('filter').value,rows=data.samples.filter(r=>!selected||r.experiment_id===selected),valid=rows.filter(r=>r.fit_eligible);$('count').textContent=`${rows.length} 行，${valid.length} 个可拟合点`;
+table($('samples'),['实验','原表行','油门 (%)','RPM','推力 (g)','电压 (V)','电流 (A)','RPM 标准差','可拟合','核对状态','排除原因'],rows.map(r=>({flag:!r.fit_eligible,cells:[r.experiment_id,r.source_row,r.throttle_percent,r.rpm,r.thrust_g,r.voltage_v,r.current_a,r.rpm_std,r.fit_eligible?'是':'否',r.review_status,r.exclusion_reason]})));
+$('chart').replaceChildren();$('legend').replaceChildren();if(!valid.length){svg('text',{x:100,y:100},'暂无可绘制点');return}
+const xmax=Math.max(...valid.map(r=>r.rpm))*1.08,ymax=Math.max(...valid.map(r=>r.thrust_g))*1.12,x=r=>80+r/xmax*880,y=r=>350-r/ymax*310;
+for(let i=0;i<=5;i++){const xx=x(xmax*i/5), yy=y(ymax*i/5);svg('line',{x1:80,x2:960,y1:yy,y2:yy,stroke:'#e1e7ed'});svg('text',{x:70,y:yy+5,'text-anchor':'end',fill:'#526779'},Math.round(ymax*i/5));svg('text',{x:xx,y:375,'text-anchor':'middle',fill:'#526779'},Math.round(xmax*i/5))}
+svg('text',{x:500,y:410,'text-anchor':'middle'},'机械转速 (RPM)');svg('text',{x:15,y:20},'推力 (g)');
+data.experiments.forEach((e,i)=>{const points=valid.filter(r=>r.experiment_id===e.experiment_id).sort((a,b)=>a.rpm-b.rpm);if(!points.length)return;const color=colors[i%colors.length];svg('polyline',{points:points.map(r=>`${x(r.rpm)},${y(r.thrust_g)}`).join(' '),fill:'none',stroke:color,'stroke-width':2});points.forEach(r=>{const n=svg('circle',{cx:x(r.rpm),cy:y(r.thrust_g),r:4,fill:color});const title=document.createElementNS(n.namespaceURI,'title');title.textContent=`${e.experiment_id} 行 ${r.source_row}: ${fmt(r.rpm)} RPM / ${fmt(r.thrust_g)} g`;n.append(title)});const label=document.createElement('span');label.textContent=`● ${e.experiment_id}　`;label.style.color=color;$('legend').append(label)})}
+$('filter').addEventListener('change',render);render();
+</script></html>

@@ -1,0 +1,37 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>电机实验数据总览</title>
+<style>body{font:15px system-ui,sans-serif;background:#f4f6fa;color:#192b3d;margin:24px}h1{margin-bottom:6px}.panel{background:white;padding:20px;border-radius:12px;margin:16px 0;box-shadow:0 2px 12px #14253609}button,select{padding:8px;margin:4px;border:1px solid #ccd4dd;border-radius:6px;background:white}table{border-collapse:collapse;width:100%;font-size:13px}td,th{text-align:left;padding:9px;border-bottom:1px solid #e7ecf1}tbody tr:hover{background:#edf6ff;cursor:pointer}.scroll{max-height:420px;overflow:auto}th{position:sticky;top:0;background:#f1f5fa}.flagged{color:#a45014}svg{width:100%;height:auto}.legend{display:flex;gap:15px;flex-wrap:wrap}.note{color:#596b7d;font-size:13px}#summary{font-size:18px}a{color:#23639c}</style>
+<h1>电机实验数据总览</h1><p class="note">原始实验可追溯 · 逐脉冲检查 · 离线使用</p><div id="summary" class="panel"></div>
+<div class="panel"><label>实验 <select id="experiment"></select></label><label>类型 <select id="phase"><option value="">全部</option><option value="experiment">正式实验</option><option value="precheck">试转</option></select></label><label>质量 <select id="quality"><option value="">全部</option><option value="pass">通过</option><option value="flagged">需检查</option></select></label><label>指令 <select id="command"></select></label><button id="clear">清空叠加</button><p class="note">点击一行查看单脉冲；勾选多行叠加。质量标记是初筛，不代表传感器已校准。试转不自动用于辨识。</p><div class="scroll"><table><thead><tr><th>叠加</th><th>实验 / 脉冲</th><th>类型</th><th>指令</th><th>目标 V</th><th>实测 V</th><th>稳态 RPM</th><th>质量 / 原因</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+<div class="panel"><h2 id="title">选择脉冲</h2><div id="legend" class="legend"></div><div id="charts"></div><p class="note">横轴：实际测试指令开始后的秒数。指令仅在 hold 段有效，释放控制与零指令分开表示。电压和供电总电流使用不超过配置时限的前一条反馈对齐；缺失保留为空。供电总电流不是独立电机电流；ESC 电流全零时不能视为有效测量。转速未平滑。</p><div id="download"></div></div>
+<script>
+const entries=__CATALOG_DATA__;
+const pulses=entries.flatMap(e=>e.pulses), samples=Object.assign({},...entries.map(e=>e.samples));
+const byId=Object.fromEntries(pulses.map(p=>[p.pulse_id,p])),sessions=Object.fromEntries(entries.map(e=>[e.experiment.experiment_id,e.experiment.session]));
+const $=id=>document.getElementById(id), selected=new Set(), colors=['#148b82','#d56a33','#516aca','#9a55a3','#9b8022','#329bb9'];
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function option(value,label){const o=document.createElement('option');o.value=value;o.textContent=label;return o;}
+function num(n,d=2){return n==null?'—':Number(n).toFixed(d)}
+$('experiment').append(option('','全部实验'));entries.forEach(e=>$('experiment').append(option(e.experiment.experiment_id,e.experiment.session)));
+$('command').append(option('','全部'));[...new Set(pulses.map(p=>p.command))].sort((a,b)=>a-b).forEach(v=>$('command').append(option(v,v.toFixed(2))));
+$('summary').textContent=`${entries.length} 次实验 · ${pulses.length} 个脉冲 · ${pulses.filter(p=>p.quality==='pass'&&p.phase==='experiment').length} 个正式脉冲通过初筛`;
+function render(){const visible=pulses.filter(p=>(!$('experiment').value||p.experiment_id===$('experiment').value)&&(!$('phase').value||p.phase===$('phase').value)&&(!$('quality').value||p.quality===$('quality').value)&&(!$('command').value||p.command===Number($('command').value)));
+$('rows').innerHTML=visible.map(p=>`<tr data-id="${p.pulse_id}"><td><input type="checkbox" ${selected.has(p.pulse_id)?'checked':''}></td><td>${esc(sessions[p.experiment_id])}<br>${p.pulse_id}</td><td>${p.phase==='precheck'?'试转':'正式'}</td><td>${num(p.command)}</td><td>${num(p.target_voltage_v)}</td><td>${num(p.mean_voltage_v)}</td><td>${num(p.steady_rpm,0)}</td><td class="${p.quality}">${p.quality==='pass'?'通过':'需检查'} ${esc(p.reasons)}</td></tr>`).join('');
+$('rows').querySelectorAll('tr').forEach(tr=>{tr.onclick=ev=>{const id=tr.dataset.id;if(ev.target.type==='checkbox'){if(ev.target.checked)selected.add(id);else selected.delete(id);}else{selected.clear();selected.add(id);}render();plot();}});}
+function plot(){const ids=[...selected];$('title').textContent=ids.length?`${ids.length} 个脉冲响应`:'选择脉冲';$('legend').innerHTML=ids.map((id,k)=>`<span style="color:${colors[k%colors.length]}">${id} · u=${num(byId[id].command)}</span>`).join('');$('charts').innerHTML='';$('download').innerHTML='';
+if(!ids.length)return;
+const times=ids.flatMap(id=>samples[id].map(r=>r.time_s)),xmin=Math.min(...times),xmax=Math.max(...times);
+for(const [field,label] of [['command','测试指令'],['rpm','转速 (rpm)'],['voltage_v','供电电压 (V)'],['supply_current_a','供电总电流 (A)']]){
+ const vals=ids.flatMap(id=>samples[id].map(r=>r[field]).filter(v=>v!==null&&Number.isFinite(v)));if(!vals.length)continue;
+ let lo=Math.min(...vals),hi=Math.max(...vals);const pad=Math.max((hi-lo)*.1,.01);lo-=pad;hi+=pad;
+ const X=t=>70+(t-xmin)/(xmax-xmin||1)*950,Y=v=>170-(v-lo)/(hi-lo)*135;
+ let svg=`<svg viewBox="0 0 1060 205" role="img" aria-label="${label}"><text x="10" y="18">${label}</text>`;
+ for(let k=0;k<=4;k++){const v=lo+(hi-lo)*k/4,y=Y(v);svg+=`<path d="M70 ${y}H1020" stroke="#e6ebf1"/><text x="5" y="${y+4}" font-size="11">${v.toFixed(field==='rpm'?0:2)}</text>`;}
+ for(let k=0;k<=5;k++){const t=xmin+(xmax-xmin)*k/5;svg+=`<text x="${X(t)}" y="192" font-size="11">${t.toFixed(2)} s</text>`;}
+ svg+=`<path d="M${X(0)} 35V170" stroke="#99a" stroke-dasharray="4 4"/>`;
+ ids.forEach((id,k)=>{let d='',valid=false;const rows=samples[id];for(let i=0;i<rows.length;i++){const r=rows[i];if(r[field]===null||!Number.isFinite(r[field])){valid=false;continue;}if(valid&&field==='command')d+=`H${X(r.time_s).toFixed(2)}`;d+=`${valid?'L':'M'}${X(r.time_s).toFixed(2)},${Y(r[field]).toFixed(2)}`;valid=true;}svg+=`<path d="${d}" fill="none" stroke="${colors[k%colors.length]}" stroke-width="1.8"/>`;});
+ $('charts').insertAdjacentHTML('beforeend',svg+'</svg>');}
+ ids.forEach(id=>{const a=document.createElement('a');a.href=byId[id].samples_path;a.textContent=`${id} CSV`;a.style.marginRight='15px';$('download').append(a);});}
+for(const id of ['experiment','phase','quality','command'])$(id).onchange=render;
+$('clear').onclick=()=>{selected.clear();render();plot();};
+if(pulses.length)selected.add((pulses.find(p=>p.phase==='experiment'&&p.quality==='pass')||pulses[0]).pulse_id);render();plot();
+</script></html>

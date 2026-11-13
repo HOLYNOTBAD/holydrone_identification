@@ -8,7 +8,7 @@ import yaml
 import numpy as np
 
 
-SCRIPT = Path(__file__).parents[1] / 'scripts' / 'gazebo_physics_process.py'
+SCRIPT = Path(__file__).parents[1] / 'scripts' / 'gazebo_physics' / 'gazebo_physics_process.py'
 SPEC = importlib.util.spec_from_file_location('gazebo_physics_process', str(SCRIPT))
 PROCESS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PROCESS)
@@ -101,7 +101,7 @@ class GazeboPhysicsTest(unittest.TestCase):
         np.testing.assert_allclose(report['rotation']['aggregate_inertia_diagonal_kg_m2'],[.018,.021,.032],rtol=.2)
 
     def test_external_prior_file_enable_disable_and_validation(self):
-        template = Path(__file__).parents[1]/'config/parameter_priors.yaml'
+        template = Path(__file__).parents[1]/'config/gazebo_physics/parameter_priors.yaml'
         prior = yaml.safe_load(template.read_text())
         base = dict(rotation_fit_method='angular_acceleration', mass_kg=1.2,
                     inertia_prior_axes=[2], inertia_prior_kg_m2=[.02],

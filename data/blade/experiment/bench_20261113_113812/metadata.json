@@ -1,0 +1,9 @@
+{
+  "experiment_id": "bench_20261113_113812",
+  "source_type": "measurement",
+  "source": "PX4 ESC_STATUS + terminal manual thrust (g)",
+  "motor": null,
+  "propeller": null,
+  "measurement_date": "2026-11-13T11:38:16.840407+08:00",
+  "notes": "手工推力与提交前遥测窗口配对；电流为 ESC 电流，空值表示无有效反馈。"
+}

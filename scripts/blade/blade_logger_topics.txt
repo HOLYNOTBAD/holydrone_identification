@@ -1,0 +1,10 @@
+# 台架专用，复制到 SD 卡 etc/logging/logger_topics.txt；0 表示不额外降采样。
+actuator_test 0
+actuator_outputs 0 0
+actuator_outputs 0 1
+actuator_outputs 0 2
+esc_status 0
+battery_status 0
+vehicle_command 0
+vehicle_command_ack 0
+vehicle_status 100

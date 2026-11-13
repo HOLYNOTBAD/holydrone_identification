@@ -1,0 +1,11 @@
+<!-- 启动 holydrone_identification 的 excite；参数按 arg 显式传递，节点参数位于各自私有空间。 -->
+<launch>
+  <!-- Compatibility entry; prefer identification_fsm.launch. -->
+  <!-- 激励或候选 YAML 路径；传给被包含 launch 或节点配置 -->
+  <arg name="config" default="$(find holydrone_identification)/config/excitation/pulse_medium.yaml"/>
+  <!-- 包含 $(find holydrone_identification)/launch/excitation/identification_fsm.launch，下列 arg 传递本入口的配置 -->
+  <include file="$(find holydrone_identification)/launch/excitation/identification_fsm.launch">
+    <!-- 激励或候选 YAML 路径；传给被包含 launch 或节点配置 -->
+    <arg name="config" value="$(arg config)"/>
+  </include>
+</launch>

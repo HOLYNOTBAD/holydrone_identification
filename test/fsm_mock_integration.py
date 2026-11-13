@@ -84,11 +84,11 @@ class IdentificationMock(unittest.TestCase):
                 server=rospy.Service('/mavros/set_mode',SetMode,mode)
                 package=Path(__file__).resolve().parents[1]
                 node=None
-                def launch(kind='brct1order',hover_mode='POSCTL',**extra):
+                def launch(kind='flight',hover_mode='POSCTL',**extra):
                     statuses.clear();commands.clear();positions.clear();mode_calls.clear();finished.clear()
                     state.mode=hover_mode;state.armed=False
                     motion.update(z=3.,x=0.,vx=0.,vy=0.,vz=0.,tilt=0.,enabled=True,old=False,rate=0.,vibration=0.,yaw=0.,imu_shift=0.,imu_enabled=True);thrust.update(value=.34,enabled=True)
-                    cfg=yaml.safe_load((package/'config'/ (kind+'.yaml')).read_text());cfg.update(repetitions=1,pulse_hold=.15)
+                    cfg=yaml.safe_load((package/'config'/ ('gazebo_physics/gazebo_physics.yaml' if kind=='gazebo_physics' else 'excitation/pulse_medium.yaml')).read_text());cfg.update(repetitions=1,pulse_hold=.15)
                     cfg['recovery'].update(settle_s=.1)
                     cfg.pop('pulse_durations_s',None)
                     cfg.update(extra);path=root/'config.yaml';path.write_text(yaml.safe_dump(cfg))
@@ -164,9 +164,8 @@ class IdentificationMock(unittest.TestCase):
                 self.assertEqual(statuses[-1]['segment'],0)
                 self.assertEqual(statuses[-1]['pulse'],0)
                 close(node);node=None
-                for kind,count in [('brct1order',4),('brct2order',12),('brct3order',12),('gazebo_physics',12)]:
-                    node=launch(kind, hover_mode='AUTO.LOITER' if kind=='brct1order' else 'POSCTL',
-                                **({'pulse_durations_s':[.1,.15,.2]} if kind in ('brct2order','brct3order') else {}))
+                for kind,count in [('flight',4),('brct1order',4),('brct2order',4),('brct3order',4),('gazebo_physics',12)]:
+                    node=launch(kind, hover_mode='AUTO.LOITER' if kind=='brct1order' else 'POSCTL')
                     time.sleep(.1);self.assertFalse(commands);self.assertFalse(positions)
                     enter()
                     wait(lambda:statuses[-1]['phase']=='pulse')
