@@ -12,3 +12,5 @@ log/
 # 本机实验原始数据、PX4 运行文件和分析产物。
 /data/*
 !/data/.gitkeep
+!/data/escmotor_dataset/
+!/data/escmotor_dataset/**

@@ -1,0 +1,3 @@
+experiment_id,session,source_ulog,fingerprint,processing_version,complete,pulse_count,dropouts,motor_index,esc_index,motor_model,propeller_model,esc_model
+exp_1debbbbdfecc,16.8v_20261112_115805,log_0_UnknownDate.ulg,a9887e274960bcd0f2c2aee63c89088a44ead7131dbcc67bbfcc4a09163ed890,1,True,19,0,2,0,,,
+exp_a73fd19c77ad,16.8v_20261112_120558,log_3_2026-11-12-12-06-46.ulg,54a20b77e192b3effa0ca1247528ffa255b61e5d4d0cf0442626bb144b67e2d4,1,True,11,0,2,0,,,
